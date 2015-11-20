@@ -18,7 +18,8 @@
 #include "PythonAPI.h"
 #include <strsafe.h>
 
-VsPyProf* VsPyProf::Create(HMODULE pythonModule) {
+HMODULE GetProfilerModule(void)
+{
     wchar_t buffer[MAX_PATH];
     buffer[0] = '\0';
 
@@ -26,22 +27,37 @@ VsPyProf* VsPyProf::Create(HMODULE pythonModule) {
     const wchar_t *dllName = L"\\System32\\VsPerf150.dll";
 #elif DEV14
     const wchar_t *dllName = L"\\System32\\VsPerf140.dll";
-#else
-#error Unsupported version of Visual Studio
+#elif DEV12
+    const wchar_t *dllName = L"\\System32\\VsPerf120.dll";
+#elif DEV11
+    const wchar_t *dllName = L"\\System32\\VsPerf110.dll";
 #endif
 
     if (!GetWindowsDirectory(buffer, MAX_PATH) ||
         (wcslen(buffer) + wcslen(dllName) + 1) > MAX_PATH ||
         FAILED(StringCchCat(buffer, MAX_PATH, dllName))) {
-            // should never happen
-            return nullptr;
-    }
-
-    HMODULE vsPerf = LoadLibrary(buffer);
-    if (vsPerf == 0) {
-        // can't load VsPerf100
+        // should never happen
         return nullptr;
     }
+
+    return LoadLibrary(buffer);
+}
+
+VsPyProf* VsPyProf::Create(HMODULE pythonModule) {
+    HMODULE profilerModule = GetProfilerModule();
+
+    if (profilerModule == NULL)
+        return nullptr;
+
+    return CreateCustom(profilerModule, pythonModule);
+}
+
+VsPyProf* VsPyProf::CreateCustom(
+    HMODULE profilerModule,
+    HMODULE pythonModule
+)
+{
+    HMODULE vsPerf = profilerModule;
 
     EnterFunctionFunc enterFunction = (EnterFunctionFunc)GetProcAddress(vsPerf, "EnterFunction");
     ExitFunctionFunc exitFunction = (ExitFunctionFunc)GetProcAddress(vsPerf, "ExitFunction");

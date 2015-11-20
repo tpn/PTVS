@@ -30,6 +30,15 @@ extern "C" VSPYPROF_API VsPyProf* CreateProfiler(HMODULE module) {
     return VsPyProf::Create(module);
 }
 
+extern "C" VSPYPROF_API VsPyProf* CreateCustomProfiler(
+    HMODULE profilerdll,
+    HMODULE pythondll
+)
+{
+    return VsPyProf::CreateCustom(profilerdll, pythondll);
+}
+
+
 // This is an example of an exported function.
 extern "C" VSPYPROF_API VsPyProfThread* InitProfiler(VsPyProf* profiler) {
     if (!profiler) {

@@ -65,6 +65,7 @@ public:
 class VsPyProf {
     friend class VsPyProfThread;
 
+    HMODULE _profileModule;
     HMODULE _pythonModule;
     PyEval_SetProfileFunc* _setProfileFunc;
     PyDict_GetItemString* _getItemStringFunc;
@@ -117,6 +118,10 @@ public:
     // Creates a new instance of the PythonApi from the given DLL.  Returns null if the
     // version is unsupported or another error occurs.
     static VsPyProf* Create(HMODULE pythonModule);
+    static VsPyProf* CreateCustom(
+        HMODULE profileModule,
+        HMODULE pythonModule
+    );
 
     void PyEval_SetProfile(Py_tracefunc func, PyObject* object);
     VsPyProfThread* CreateThread() {
