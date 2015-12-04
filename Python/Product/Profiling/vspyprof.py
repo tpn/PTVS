@@ -3,6 +3,7 @@ try:
 except:
     import _thread as thread
 
+import os
 import sys
 import ctypes
 
@@ -59,17 +60,34 @@ def start_profiling():
     # load as PyDll so we're called w/ the GIL held
     return pyprofdll.InitProfiler(profiler)
 
-def profile(file, globals_obj, locals_obj, profdll):
+def profile(file, globals_obj, locals_obj, profdll, custprofdllname=None):
     global profiler, pyprofdll
+
+    if custprofdllname:
+        custprofdll = ctypes.windll.LoadLibrary(custprofdllname)
+        if not custprofdll:
+            raise OSError("Failed to load %s" % custprofdllname)
+        filename = os.path.basename(custprofdll)
+        custprofhandle = ctypes.kernel32.GetModuleHandleA(filename)
+        if not custprofhandle:
+            raise OSError("Failed to get handle for %s" % filename)
+    else:
+        custprofhandle = None
 
     pyprofdll = ctypes.PyDLL(profdll)
     pyprofdll.CreateProfiler.restype = ctypes.c_void_p
+    pyprofdll.CreateCustomProfiler.restype = ctypes.c_void_p
+    pyprofdll.CreateCustomProfiler.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
     pyprofdll.CloseThread.argtypes = [ctypes.c_void_p]
     pyprofdll.CloseProfiler.argtypes = [ctypes.c_void_p]
     pyprofdll.InitProfiler.argtypes = [ctypes.c_void_p]
     pyprofdll.InitProfiler.restype = ctypes.c_void_p
 
-    profiler = pyprofdll.CreateProfiler(sys.dllhandle)
+    if custprofhandle:
+        profiler = pyprofdll.CreateCustomProfiler(custprofhandle, sys.dllhandle)
+    else:
+        profiler = pyprofdll.CreateProfiler(sys.dllhandle)
+
     if not profiler:
         raise NotImplementedError("Profiling is currently not supported for " + sys.version)
     handle = None

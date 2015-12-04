@@ -11,28 +11,45 @@ if sys.platform == 'cli':
     raw_input()
     sys.exit(1)
 
-import vspyprof
 import os
+import vspyprof
 
-# arguments are path to profiling DLL, working dir, normal arguments which should include a filename to execute
+# arguments are path to profiling DLL, working dir, custom profile DLL or -,
+# normal arguments which should include a filename to execute
 
 # change to directory we expected to start from
-os.chdir(sys.argv[2])
-profdll = sys.argv[1]
+python_file = None
+sys.argv.pop(0)
+profdll = sys.argv.pop(0)
+run_dir = sys.argv.pop(0)
+custdll = sys.argv.pop(0)
+if custdll == '-':
+    custdll = None
+if custdll and not custdll.endswith('.dll'):
+    python_file = custdll
+    custdll = None
+if not python_file:
+    python_file = sys.argv.pop(0)
 
 # fix sys.path to be our real starting dir, not this one
-sys.path[0] = sys.argv[2]
-del sys.argv[0:3]	
+sys.path.insert(0, run_dir)
 
 # set file appropriately, fix up sys.argv...
-__file__ = sys.argv[0]
+__file__ = python_file
+sys.argv.insert(0, python_file)
 
 # remove all state we imported
 del sys, os
 
 # and start profiling
 try:
-    vspyprof.profile(__file__, globals(), locals(), profdll)
+    vspyprof.profile(
+        __file__,
+        globals(),
+        locals(),
+        profdll,
+        custprofdllname=custdll,
+    )
 except SystemExit:
     import sys, msvcrt, os
     if sys.exc_info()[1].code:
