@@ -30,6 +30,7 @@
 using namespace std;
 
 typedef void PyEval_SetProfileFunc(Py_tracefunc func, PyObject *obj);
+typedef void PyEval_SetTraceFunc(Py_tracefunc func, PyObject *obj);
 typedef PyObject* PyDict_GetItemString(PyObject *dp, const char *key);
 
 // function definitions so we can dynamically link to profiler APIs
@@ -41,6 +42,8 @@ typedef PROFILE_COMMAND_STATUS (_stdcall *SourceLineFunc)(DWORD_PTR functionToke
 typedef void (__stdcall *EnterFunctionFunc)(DWORD_PTR FunctionToken, DWORD_PTR ModuleToken);
 // notify function exit
 typedef void (__stdcall *ExitFunctionFunc)(DWORD_PTR FunctionToken, DWORD_PTR ModuleToken);
+
+typedef void (__stdcall *TraceLineFunc)(void *frame, DWORD_PTR LineToken, DWORD_PTR FunctionToken, DWORD_PTR ModuleToken);
 
 typedef wchar_t* PyUnicode_AsUnicode(PyObject *unicode           /* Unicode object */);
 typedef size_t PyUnicode_GetLength(PyObject *unicode);
@@ -68,6 +71,7 @@ class VsPyProf {
     HMODULE _profileModule;
     HMODULE _pythonModule;
     PyEval_SetProfileFunc* _setProfileFunc;
+    PyEval_SetTraceFunc* _setTraceFunc;
     PyDict_GetItemString* _getItemStringFunc;
     PyUnicode_AsUnicode* _asUnicode;
     PyUnicode_GetLength* _unicodeGetLength;
@@ -93,8 +97,9 @@ class VsPyProf {
     ExitFunctionFunc _exitFunction;
     NameTokenFunc _nameToken;
     SourceLineFunc _sourceLine;
+    TraceLineFunc _traceLine;
 
-    VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength);
+    VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, TraceLineFunc traceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength);
 
     // Extracts the function and module identifier from a user defined function
     bool GetUserToken(PyFrameObject *frame, DWORD_PTR& func, DWORD_PTR& module);
@@ -124,6 +129,7 @@ public:
     );
 
     void PyEval_SetProfile(Py_tracefunc func, PyObject* object);
+    void PyEval_SetTrace(Py_tracefunc func, PyObject* object);
     VsPyProfThread* CreateThread() {
         return new VsPyProfThread(this);
     }

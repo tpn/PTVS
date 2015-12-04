@@ -70,6 +70,8 @@ VsPyProf* VsPyProf::CreateCustom(
     ExitFunctionFunc exitFunction = (ExitFunctionFunc)GetProcAddress(vsPerf, "ExitFunction");
     NameTokenFunc nameToken = (NameTokenFunc)GetProcAddress(vsPerf, "NameToken");
     SourceLineFunc sourceLine = (SourceLineFunc)GetProcAddress(vsPerf, "SourceLine");
+    // TraceLineFunc is custom; it won't be supported by vsperf.
+    TraceLineFunc traceLine = (TraceLineFunc)GetProcAddress(vsPerf, "TraceLine");
 
     if (enterFunction == NULL || exitFunction == NULL || nameToken == NULL || sourceLine == NULL) {
         return nullptr;
@@ -88,6 +90,7 @@ VsPyProf* VsPyProf::CreateCustom(
     }
     auto pyUniType = (PyObject*)GetProcAddress(pythonModule, "PyUnicode_Type");
     auto setProfileFunc = (PyEval_SetProfileFunc*)GetProcAddress(pythonModule, "PyEval_SetProfile");
+    auto setTraceFunc = (PyEval_SetTraceFunc*)GetProcAddress(pythonModule, "PyEval_SetTrace");
     auto getItemFromStringFunc = (PyDict_GetItemString*)GetProcAddress(pythonModule, "PyDict_GetItemString");
     auto pyCFuncType = (PyObject*)GetProcAddress(pythonModule, "PyCFunction_Type");
     auto pyInstType = (PyObject*)GetProcAddress(pythonModule, "PyInstance_Type");
@@ -119,10 +122,12 @@ VsPyProf* VsPyProf::CreateCustom(
                             exitFunction,
                             nameToken,
                             sourceLine,
+                            traceLine,
                             pyCodeType,
                             pyStrType,
                             pyUniType,
                             setProfileFunc,
+                            setTraceFunc,
                             pyCFuncType,
                             getItemFromStringFunc,
                             pyDictType,
@@ -142,6 +147,10 @@ VsPyProf* VsPyProf::CreateCustom(
 
 void VsPyProf::PyEval_SetProfile(Py_tracefunc func, PyObject* object) {
     _setProfileFunc(func, object);
+}
+
+void VsPyProf::PyEval_SetTrace(Py_tracefunc func, PyObject* object) {
+    _setTraceFunc(func, object);
 }
 
 bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR& module) {
@@ -520,7 +529,7 @@ void VsPyProf::GetNameAscii(PyObject* object, string& name) {
     }
 }
 
-VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength)
+VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, TraceLineFunc traceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength)
     : _pythonModule(pythonModule),
     MajorVersion(majorVersion),
     MinorVersion(minorVersion),
@@ -528,10 +537,12 @@ VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, Ent
     _exitFunction(exitFunction),
     _nameToken(nameToken),
     _sourceLine(sourceLine),
+    _traceLine(traceLine),
     PyCode_Type(pyCodeType),
     PyStr_Type(pyStringType),
     PyUni_Type(pyUnicodeType),
     _setProfileFunc(setProfileFunc),
+    _setTraceFunc(setTraceFunc),
     PyCFunction_Type(cfunctionType),
     _getItemStringFunc(getItemStringFunc),
     PyDict_Type(pyDictType),
@@ -561,6 +572,11 @@ int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
     DWORD_PTR func, module;
 
     switch (what) {
+    case PyTrace_LINE:
+        if (_profiler->_traceLine && 0) {
+
+        }
+        break;
     case PyTrace_CALL:
         if (++_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
             _profiler->_enterFunction(func, module);
