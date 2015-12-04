@@ -22,25 +22,32 @@ HMODULE GetProfilerModule(void)
 {
     wchar_t buffer[MAX_PATH];
     buffer[0] = '\0';
+    static const wchar_t* const dlls[] = {
+        L"\\System32\\VsPerf150.dll",
+        L"\\System32\\VsPerf140.dll",
+        L"\\System32\\VsPerf120.dll",
+        L"\\System32\\VsPerf110.dll",
+        L"\\System32\\VsPerf100.dll"
+    };
+    const unsigned int dll_count = sizeof(dlls) / sizeof(wchar_t);
+    HMODULE mod;
 
-#if DEV15
-    const wchar_t *dllName = L"\\System32\\VsPerf150.dll";
-#elif DEV14
-    const wchar_t *dllName = L"\\System32\\VsPerf140.dll";
-#elif DEV12
-    const wchar_t *dllName = L"\\System32\\VsPerf120.dll";
-#elif DEV11
-    const wchar_t *dllName = L"\\System32\\VsPerf110.dll";
-#endif
+    for (int i = 0; i < dll_count; i++) {
+        const wchar_t *dllName = dlls[i];
 
-    if (!GetWindowsDirectory(buffer, MAX_PATH) ||
-        (wcslen(buffer) + wcslen(dllName) + 1) > MAX_PATH ||
-        FAILED(StringCchCat(buffer, MAX_PATH, dllName))) {
-        // should never happen
-        return nullptr;
+        if (!GetWindowsDirectory(buffer, MAX_PATH) ||
+            (wcslen(buffer) + wcslen(dllName) + 1) > MAX_PATH ||
+            FAILED(StringCchCat(buffer, MAX_PATH, dllName))) {
+            // should never happen
+            return nullptr;
+        }
+
+        mod = LoadLibrary(buffer);
+        if (mod != nullptr)
+            return mod;
     }
 
-    return LoadLibrary(buffer);
+    return nullptr;
 }
 
 VsPyProf* VsPyProf::Create(HMODULE pythonModule) {
