@@ -65,13 +65,12 @@ VsPyProf* VsPyProf::CreateCustom(
 )
 {
     HMODULE vsPerf = profilerModule;
+	__debugbreak();
 
     EnterFunctionFunc enterFunction = (EnterFunctionFunc)GetProcAddress(vsPerf, "EnterFunction");
     ExitFunctionFunc exitFunction = (ExitFunctionFunc)GetProcAddress(vsPerf, "ExitFunction");
     NameTokenFunc nameToken = (NameTokenFunc)GetProcAddress(vsPerf, "NameToken");
     SourceLineFunc sourceLine = (SourceLineFunc)GetProcAddress(vsPerf, "SourceLine");
-    // TraceLineFunc is custom; it won't be supported by vsperf.
-    TraceLineFunc traceLine = (TraceLineFunc)GetProcAddress(vsPerf, "TraceLine");
 
     if (enterFunction == NULL || exitFunction == NULL || nameToken == NULL || sourceLine == NULL) {
         return nullptr;
@@ -122,7 +121,6 @@ VsPyProf* VsPyProf::CreateCustom(
                             exitFunction,
                             nameToken,
                             sourceLine,
-                            traceLine,
                             pyCodeType,
                             pyStrType,
                             pyUniType,
@@ -146,11 +144,10 @@ VsPyProf* VsPyProf::CreateCustom(
 }
 
 void VsPyProf::PyEval_SetProfile(Py_tracefunc func, PyObject* object) {
-    _setProfileFunc(func, object);
-}
-
-void VsPyProf::PyEval_SetTrace(Py_tracefunc func, PyObject* object) {
-    _setTraceFunc(func, object);
+    if (_isTracing)
+        _setTraceFunc(func, object);
+    else
+        _setProfileFunc(func, object);
 }
 
 bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR& module) {
@@ -251,6 +248,8 @@ bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR&
     }
     return false;
 }
+
+void VsPyProf::TraceLine(PyFrameObject* frameObj, )
 
 wstring VsPyProf::GetClassNameFromFrame(PyFrameObject* frameObj, PyObject *codeObj) {
 
@@ -573,8 +572,8 @@ int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
 
     switch (what) {
     case PyTrace_LINE:
-        if (_profiler->_traceLine && 0) {
-
+        if (_profiler->_isTracing) {
+            _profiler->TraceLine(frame, arg);
         }
         break;
     case PyTrace_CALL:

@@ -38,8 +38,29 @@ extern "C" VSPYPROF_API VsPyProf* CreateCustomProfiler(
     return VsPyProf::CreateCustom(profilerdll, pythondll);
 }
 
+extern "C" VSPYPROF_API void SetTracing(VsPyProf* profiler) {
+    if (!profiler) {
+        return;
+    }
+    profiler->SetTracing();
+    return;
+}
 
-// This is an example of an exported function.
+extern "C" VSPYPROF_API void UnsetTracing(VsPyProf* profiler) {
+    if (!profiler) {
+        return;
+    }
+    profiler->UnsetTracing();
+    return;
+}
+
+extern "C" VSPYPROF_API bool IsTracing(VsPyProf* profiler) {
+    if (!profiler) {
+        return;
+    }
+    return profiler->IsTracing();
+}
+
 extern "C" VSPYPROF_API VsPyProfThread* InitProfiler(VsPyProf* profiler) {
     if (!profiler) {
         return nullptr;

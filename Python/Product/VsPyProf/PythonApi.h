@@ -68,6 +68,7 @@ public:
 class VsPyProf {
     friend class VsPyProfThread;
 
+    bool _isTracing;
     HMODULE _profileModule;
     HMODULE _pythonModule;
     PyEval_SetProfileFunc* _setProfileFunc;
@@ -111,6 +112,8 @@ class VsPyProf {
     void RegisterName(DWORD_PTR token, PyObject* name, wstring* moduleName = nullptr);
     bool GetName(PyObject* object, wstring& name);
     void GetNameAscii(PyObject* object, string& name);
+
+    void TraceLine(PyFrameObject *frame, PyObject *arg);
     
     void ReferenceObject(PyObject* object) {
         object->ob_refcnt++;
@@ -129,10 +132,13 @@ public:
     );
 
     void PyEval_SetProfile(Py_tracefunc func, PyObject* object);
-    void PyEval_SetTrace(Py_tracefunc func, PyObject* object);
     VsPyProfThread* CreateThread() {
         return new VsPyProfThread(this);
     }
+
+    void SetTracing(void) { _isTracing = true; }
+    void UnsetTracing(void) { _isTracing = false; }
+    bool IsTracing(void) { return _isTracing; }
 
     void AddRef() {
         _refCount++;
