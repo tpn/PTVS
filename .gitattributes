@@ -9,5 +9,10 @@
 *.mht -text
 *.pickle -text
 
+*.cpp eol=crlf
+*.h eol=crlf
+
 # Some Windows-specific files should always be CRLF
 *.bat eol=crlf
+*.sln* eol=crlf
+*.vcxproj* eol=crlf

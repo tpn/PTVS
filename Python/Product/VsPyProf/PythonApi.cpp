@@ -65,7 +65,6 @@ VsPyProf* VsPyProf::CreateCustom(
 )
 {
     HMODULE vsPerf = profilerModule;
-	__debugbreak();
 
     EnterFunctionFunc enterFunction = (EnterFunctionFunc)GetProcAddress(vsPerf, "EnterFunction");
     ExitFunctionFunc exitFunction = (ExitFunctionFunc)GetProcAddress(vsPerf, "ExitFunction");
@@ -150,6 +149,17 @@ void VsPyProf::PyEval_SetProfile(Py_tracefunc func, PyObject* object) {
         _setProfileFunc(func, object);
 }
 
+void VsPyProf::LoadSourceFile(DWORD_PTR module, wstring& moduleName, wstring& filename)
+{
+    auto sourceIter = _sourceFiles.find(module);
+    if (sourceIter == _sourceFiles.end()) {
+        SourceFile *sf = SourceFile::Create(module, moduleName, filename);
+        if (sf) {
+            _sourceFiles[module] = sf;
+        }
+    }
+}
+
 bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR& module) {
     auto codeObj = frameObj->f_code;
     if (codeObj->ob_type == PyCode_Type) {
@@ -194,6 +204,10 @@ bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR&
                 GetModuleName(filenameStr, moduleName);
 
                 _registeredModules[module] = moduleName;
+
+                if (IsTracing()) {
+                    LoadSourceFile(module, moduleName, filenameStr);
+                }
 
                 // make sure we only have valid path chars, vsperfreport doesn't like invalid chars
                 for (size_t i = 0; i < filenameStr.length(); i++) {
@@ -249,7 +263,10 @@ bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR&
     return false;
 }
 
-void VsPyProf::TraceLine(PyFrameObject* frameObj, )
+void VsPyProf::TraceLine(PyFrameObject* frameObj)
+{
+
+}
 
 wstring VsPyProf::GetClassNameFromFrame(PyFrameObject* frameObj, PyObject *codeObj) {
 
@@ -528,7 +545,7 @@ void VsPyProf::GetNameAscii(PyObject* object, string& name) {
     }
 }
 
-VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, TraceLineFunc traceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength)
+VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength)
     : _pythonModule(pythonModule),
     MajorVersion(majorVersion),
     MinorVersion(minorVersion),
@@ -536,7 +553,6 @@ VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, Ent
     _exitFunction(exitFunction),
     _nameToken(nameToken),
     _sourceLine(sourceLine),
-    _traceLine(traceLine),
     PyCode_Type(pyCodeType),
     PyStr_Type(pyStringType),
     PyUni_Type(pyUnicodeType),
@@ -572,8 +588,8 @@ int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
 
     switch (what) {
     case PyTrace_LINE:
-        if (_profiler->_isTracing) {
-            _profiler->TraceLine(frame, arg);
+        if (_profiler->_isTracing && _profiler->GetUserToken(frame, func, module)) {
+            _profiler->TraceLine(frame);
         }
         break;
     case PyTrace_CALL:

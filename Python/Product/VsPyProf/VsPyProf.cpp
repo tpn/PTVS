@@ -56,7 +56,7 @@ extern "C" VSPYPROF_API void UnsetTracing(VsPyProf* profiler) {
 
 extern "C" VSPYPROF_API bool IsTracing(VsPyProf* profiler) {
     if (!profiler) {
-        return;
+        return false;
     }
     return profiler->IsTracing();
 }
@@ -65,7 +65,7 @@ extern "C" VSPYPROF_API VsPyProfThread* InitProfiler(VsPyProf* profiler) {
     if (!profiler) {
         return nullptr;
     }
-    
+
     auto thread = profiler->CreateThread();
 
     if (thread != nullptr) {
