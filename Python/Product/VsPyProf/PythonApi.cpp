@@ -567,7 +567,8 @@ VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, Ent
     PyModule_Type(pyModuleType),
     PyInstance_Type(pyInstType),
     _asUnicode(asUnicode),
-    _unicodeGetLength(unicodeGetLength) {
+    _unicodeGetLength(unicodeGetLength),
+    _refCount(0) {
 }
 
 VsPyProfThread::VsPyProfThread(VsPyProf* profiler) : _profiler(profiler), _depth(0) {
