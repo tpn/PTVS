@@ -127,9 +127,9 @@ SourceFile* SourceFile::Create(
     PCHAR Dest = (PCHAR)Buffer;
     DWORD Lines = 0;
     DWORD NextLine = 0;
+    DWORD InitialSize = (FileSize >= 30 ? FileSize / 30 : 3);
 
-    // 30 seems like a reasonable heuristic here.
-    vector<DWORD> LineOffsets(FileSize / 30);
+    vector<DWORD> LineOffsets(InitialSize);
     // LineOffsets[0] = 0 -> dummy entry.
     // LineOffsets[1] = 0 -> byte offset of first line will always be 0.
     LineOffsets[Lines++] = 0;
@@ -150,7 +150,7 @@ SourceFile* SourceFile::Create(
             continue;
         }
 
-        if (Lines == LineOffsets.capacity()) {
+        if (Lines == LineOffsets.size()) {
             LineOffsets.resize(LineOffsets.size() + 100);
         }
         LineOffsets[Lines++] = i + 1;
