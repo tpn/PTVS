@@ -50,5 +50,3 @@ typedef struct _PYTRACE_CALL {
 } PYTRACE_CALL, *PPYTRACE_CALL;
 
 }
-
-#endif
