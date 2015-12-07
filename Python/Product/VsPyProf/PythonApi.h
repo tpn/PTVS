@@ -59,6 +59,7 @@ public:
     ~VsPyProfThread();
     VsPyProf* GetProfiler();
 
+    int Profile(PyFrameObject *frame, int what, PyObject *arg);
     int Trace(PyFrameObject *frame, int what, PyObject *arg);
 };
 

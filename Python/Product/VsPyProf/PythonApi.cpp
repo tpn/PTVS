@@ -588,8 +588,43 @@ VsPyProf* VsPyProfThread::GetProfiler() {
     return _profiler;
 }
 
+int VsPyProfThread::Profile(PyFrameObject *frame, int what, PyObject *arg) {
+    DWORD_PTR func, module;
+
+    switch (what) {
+    case PyTrace_CALL:
+        if (++_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
+            _profiler->_enterFunction(func, module);
+        }
+        break;
+    case PyTrace_RETURN:
+        if (_depth && --_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
+            _profiler->_exitFunction(func, module);
+        }
+        break;
+    case PyTrace_C_CALL:
+        if (++_depth > _skippedFrames && _profiler->GetBuiltinToken(arg, func, module)) {
+            _profiler->_enterFunction(func, module);
+        }
+        break;
+    case PyTrace_C_RETURN:
+        if (_depth && --_depth > _skippedFrames && _profiler->GetBuiltinToken(arg, func, module)) {
+            _profiler->_exitFunction(func, module);
+        }
+        break;
+    }
+
+    return 0;
+}
+
 int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
     DWORD_PTR func, module;
+
+    if (!_profiler->IsTracing()) {
+        return Profile(frame, what, arg);
+    }
+
+    int lineno = _profiler->_frameGetLineNumber(frame);
 
     switch (what) {
     case PyTrace_LINE:
