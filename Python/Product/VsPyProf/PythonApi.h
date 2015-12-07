@@ -46,6 +46,7 @@ typedef void (__stdcall *ExitFunctionFunc)(DWORD_PTR FunctionToken, DWORD_PTR Mo
 
 typedef wchar_t* PyUnicode_AsUnicode(PyObject *unicode           /* Unicode object */);
 typedef size_t PyUnicode_GetLength(PyObject *unicode);
+typedef int PyFrame_GetLineNumber(PyFrameObject *f);
 
 class VsPyProf;
 
@@ -75,12 +76,13 @@ class VsPyProf {
     PyDict_GetItemString* _getItemStringFunc;
     PyUnicode_AsUnicode* _asUnicode;
     PyUnicode_GetLength* _unicodeGetLength;
-    
+    PyFrame_GetLineNumber* _frameGetLineNumber;
+
     unordered_set<DWORD_PTR> _registeredObjects;
     unordered_set<PyObject*> _referencedObjects;
     unordered_map<DWORD_PTR, wstring> _registeredModules;
     unordered_map<DWORD_PTR, SourceFile*> _sourceFiles;
-    
+
     // Python type objects
     PyObject* PyCode_Type;
     PyObject* PyStr_Type;
@@ -99,7 +101,7 @@ class VsPyProf {
     NameTokenFunc _nameToken;
     SourceLineFunc _sourceLine;
 
-    VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength);
+    VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber);
 
     // Extracts the function and module identifier from a user defined function
     bool GetUserToken(PyFrameObject *frame, DWORD_PTR& func, DWORD_PTR& module);
@@ -114,7 +116,7 @@ class VsPyProf {
 
     void TraceLine(PyFrameObject *frame);
     void LoadSourceFile(DWORD_PTR module, wstring& moduleName, wstring& filename);
-    
+
     void ReferenceObject(PyObject* object) {
         object->ob_refcnt++;
         _referencedObjects.insert(object);

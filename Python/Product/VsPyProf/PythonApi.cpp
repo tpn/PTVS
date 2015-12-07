@@ -94,10 +94,11 @@ VsPyProf* VsPyProf::CreateCustom(
     auto pyInstType = (PyObject*)GetProcAddress(pythonModule, "PyInstance_Type");
     auto unicodeAsUnicode = (PyUnicode_AsUnicode*)GetProcAddress(pythonModule, "PyUnicode_AsUnicode");
     auto unicodeGetLength = (PyUnicode_GetLength*)GetProcAddress(pythonModule, "PyUnicode_GetLength");
+    auto frameGetLineNumber = (PyFrame_GetLineNumber*)GetProcAddress(pythonModule, "PyFrame_GetLineNumber");
 
     if (getVersion != NULL && pyCodeType != NULL && pyStrType != NULL && pyUniType != NULL && setProfileFunc != NULL &&
         pyCFuncType != NULL && getItemFromStringFunc != NULL && pyDictType != NULL && pyTupleType != NULL && pyTypeType != NULL &&
-        pyFuncType != NULL && pyModuleType != NULL) {
+        pyFuncType != NULL && pyModuleType != NULL && frameGetLineNumber != NULL && setTraceFunc != NULL) {
             auto version = getVersion();
             if (version != NULL) {
                 // parse version like "2.7"
@@ -134,7 +135,8 @@ VsPyProf* VsPyProf::CreateCustom(
                             pyModuleType,
                             pyInstType,
                             unicodeAsUnicode,
-                            unicodeGetLength);
+                            unicodeGetLength,
+                            frameGetLineNumber);
                 }
             }
     }
@@ -265,6 +267,7 @@ bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR&
 
 void VsPyProf::TraceLine(PyFrameObject* frameObj)
 {
+    int lineno = _frameGetLineNumber(frameObj);
 
 }
 
@@ -545,7 +548,7 @@ void VsPyProf::GetNameAscii(PyObject* object, string& name) {
     }
 }
 
-VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength)
+VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber)
     : _pythonModule(pythonModule),
     MajorVersion(majorVersion),
     MinorVersion(minorVersion),
@@ -568,6 +571,7 @@ VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, Ent
     PyInstance_Type(pyInstType),
     _asUnicode(asUnicode),
     _unicodeGetLength(unicodeGetLength),
+    _frameGetLineNumber(frameGetLineNumber),
     _refCount(0) {
 }
 
