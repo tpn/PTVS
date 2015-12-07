@@ -245,7 +245,7 @@ public:
 };
 
 
-// 
+//
 // 2.4 - 3.5, 2.4 has different compat in 64-bit but we don't support any of the released 64-bit platforms (which includes only IA-64)
 // While these are compatible there are fields only available on later versions.
 class PyTypeObject : public PyVarObject {
@@ -427,7 +427,7 @@ public:
     int recursion_depth;
     char overflowed; /* The stack has overflowed. Allow 50 more calls
                         to handle the runtime error. */
-    char recursion_critical; /* The current calls must not cause 
+    char recursion_critical; /* The current calls must not cause
                                 a stack overflow. */
     /* 'tracing' keeps track of the execution depth when tracing/profiling.
        This is to prevent the actual trace/profile code from being recorded in
@@ -483,7 +483,7 @@ public:
     int recursion_depth;
     char overflowed; /* The stack has overflowed. Allow 50 more calls
                         to handle the runtime error. */
-    char recursion_critical; /* The current calls must not cause 
+    char recursion_critical; /* The current calls must not cause
                                 a stack overflow. */
     /* 'tracing' keeps track of the execution depth when tracing/profiling.
        This is to prevent the actual trace/profile code from being recorded in
