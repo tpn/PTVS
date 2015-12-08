@@ -88,6 +88,11 @@ extern "C" VSPYPROF_API void CloseThread(VsPyProfThread* thread) {
     }
 }
 
+// Handy for forcing a break so that Visual Studio can be attached.
+extern "C" VSPYPROF_API void Debugbreak(void) {
+    __debugbreak();
+}
+
 // used for compat w/ Python 2.4 where we don't have ctypes.
 extern "C" VSPYPROF_API void initvspyprof(void) {
 }
