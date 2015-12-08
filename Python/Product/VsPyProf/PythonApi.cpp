@@ -50,6 +50,29 @@ HMODULE GetProfilerModule(void)
     return nullptr;
 }
 
+// True on success, False on failure.
+bool ResolveProfilerFunctions(HMODULE moduleHandle, PVSPERF vsperf)
+{
+    if (!moduleHandle) {
+        return false;
+    }
+
+    SecureZeroMemory(vsperf, sizeof(*vsperf));
+
+    vsperf->ModuleHandle = moduleHandle;
+    vsperf->EnterFunction = (EnterFunctionFunc)GetProcAddress(moduleHandle, "EnterFunction");
+    vsperf->ExitFunction = (ExitFunctionFunc)GetProcAddress(moduleHandle, "ExitFunction");
+    vsperf->NameToken = (NameTokenFunc)GetProcAddress(moduleHandle, "NameToken");
+    vsperf->SourceLine = (SourceLineFunc)GetProcAddress(moduleHandle, "SourceLine");
+
+    return (
+        vsperf->EnterFunction   &&
+        vsperf->ExitFunction    &&
+        vsperf->NameToken       &&
+        vsperf->SourceLine
+    );
+}
+
 VsPyProf* VsPyProf::Create(HMODULE pythonModule) {
     HMODULE profilerModule = GetProfilerModule();
 
@@ -64,14 +87,8 @@ VsPyProf* VsPyProf::CreateCustom(
     HMODULE pythonModule
 )
 {
-    HMODULE vsPerf = profilerModule;
-
-    EnterFunctionFunc enterFunction = (EnterFunctionFunc)GetProcAddress(vsPerf, "EnterFunction");
-    ExitFunctionFunc exitFunction = (ExitFunctionFunc)GetProcAddress(vsPerf, "ExitFunction");
-    NameTokenFunc nameToken = (NameTokenFunc)GetProcAddress(vsPerf, "NameToken");
-    SourceLineFunc sourceLine = (SourceLineFunc)GetProcAddress(vsPerf, "SourceLine");
-
-    if (enterFunction == NULL || exitFunction == NULL || nameToken == NULL || sourceLine == NULL) {
+    VSPERF vsperf;
+    if (!ResolveProfilerFunctions(profilerModule, &vsperf)) {
         return nullptr;
     }
 
@@ -117,10 +134,7 @@ VsPyProf* VsPyProf::CreateCustom(
                         return new VsPyProf(pythonModule,
                             major,
                             minor,
-                            enterFunction,
-                            exitFunction,
-                            nameToken,
-                            sourceLine,
+                            &vsperf,
                             pyCodeType,
                             pyStrType,
                             pyUniType,
@@ -548,14 +562,10 @@ void VsPyProf::GetNameAscii(PyObject* object, string& name) {
     }
 }
 
-VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber)
+VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, PVSPERF pVsPerf, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber)
     : _pythonModule(pythonModule),
     MajorVersion(majorVersion),
     MinorVersion(minorVersion),
-    _enterFunction(enterFunction),
-    _exitFunction(exitFunction),
-    _nameToken(nameToken),
-    _sourceLine(sourceLine),
     PyCode_Type(pyCodeType),
     PyStr_Type(pyStringType),
     PyUni_Type(pyUnicodeType),
@@ -572,7 +582,13 @@ VsPyProf::VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, Ent
     _asUnicode(asUnicode),
     _unicodeGetLength(unicodeGetLength),
     _frameGetLineNumber(frameGetLineNumber),
-    _refCount(0) {
+    _refCount(0)
+{
+    memcpy((void *)&vsperf, (const void *)pVsPerf, sizeof(vsperf));
+    _enterFunction = vsperf.EnterFunction;
+    _exitFunction = vsperf.ExitFunction;
+    _nameToken = vsperf.NameToken;
+    _sourceLine = vsperf.SourceLine;
 }
 
 VsPyProfThread::VsPyProfThread(VsPyProf* profiler) : _profiler(profiler), _depth(0) {

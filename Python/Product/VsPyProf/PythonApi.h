@@ -44,6 +44,14 @@ typedef void (__stdcall *EnterFunctionFunc)(DWORD_PTR FunctionToken, DWORD_PTR M
 // notify function exit
 typedef void (__stdcall *ExitFunctionFunc)(DWORD_PTR FunctionToken, DWORD_PTR ModuleToken);
 
+typedef struct _VSPERF {
+    HANDLE ModuleHandle;
+    NameTokenFunc NameToken;
+    SourceLineFunc SourceLine;
+    EnterFunctionFunc EnterFunction;
+    ExitFunctionFunc ExitFunction;
+} VSPERF, *PVSPERF;
+
 typedef wchar_t* PyUnicode_AsUnicode(PyObject *unicode           /* Unicode object */);
 typedef size_t PyUnicode_GetLength(PyObject *unicode);
 typedef int PyFrame_GetLineNumber(PyFrameObject *f);
@@ -96,13 +104,17 @@ class VsPyProf {
     PyObject* PyModule_Type;
     PyObject* PyInstance_Type;
 
-    // profiler APIs
+    VSPERF vsperf;
+
+    // Profiler APIs.  If we're profiling, and not tracing,
+    // these will be set to their VsPerf counterparts in the
+    // above structure.
     EnterFunctionFunc _enterFunction;
     ExitFunctionFunc _exitFunction;
     NameTokenFunc _nameToken;
     SourceLineFunc _sourceLine;
 
-    VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, EnterFunctionFunc enterFunction, ExitFunctionFunc exitFunction, NameTokenFunc nameToken, SourceLineFunc sourceLine, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber);
+    VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, PVSPERF vsperf, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber);
 
     // Extracts the function and module identifier from a user defined function
     bool GetUserToken(PyFrameObject *frame, DWORD_PTR& func, DWORD_PTR& module);
