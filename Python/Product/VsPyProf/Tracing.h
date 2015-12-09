@@ -159,6 +159,11 @@ VSPYPROF_API BOOL GetTraceStoreRecordCount(
     PLARGE_INTEGER RecordCount
 );
 
+VSPYPROF_API LPVOID GetNextRecord(
+    PTRACE_STORE TraceStore,
+    LARGE_INTEGER RecordSize
+);
+
 #ifdef __cpp
 } // extern "C"
 #endif
