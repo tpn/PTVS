@@ -6,6 +6,7 @@
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="VsPyProf.cpp" />
     <ClCompile Include="SourceFile.cpp" />
+    <ClCompile Include="Tracing.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="python.h" />
@@ -14,5 +15,6 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="VsPyProf.h" />
     <ClInclude Include="SourceFile.h" />
+    <ClInclude Include="Tracing.h" />
   </ItemGroup>
 </Project>

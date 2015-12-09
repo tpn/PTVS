@@ -91,6 +91,7 @@
     <ClInclude Include="SourceFile.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="Tracing.h" />
     <ClInclude Include="VsPyProf.h" />
   </ItemGroup>
   <ItemGroup>
@@ -102,6 +103,9 @@
     <ClCompile Include="SourceFile.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Tracing.c" >
+        <PrecompiledHeader />
     </ClCompile>
     <ClCompile Include="VsPyProf.cpp" />
   </ItemGroup>
