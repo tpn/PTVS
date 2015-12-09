@@ -71,11 +71,11 @@ typedef struct _TRACE_EVENT {
     USHORT          EventType;          //  2   4
     DWORD           LineNumber;         //  4   8
     LARGE_INTEGER   SystemTime;         //  8   16
-    DWORD_PTR       FramePointer;       //  8   24
-    DWORD_PTR       ModulePointer;      //  8   30
-    DWORD_PTR       FuncPointer;        //  8   38
-    DWORD_PTR       LinePointer;        //  8   46
-    DWORD_PTR       ObjPointer;         //  8   54
+    LARGE_INTEGER   FramePointer;       //  8   24
+    LARGE_INTEGER   ModulePointer;      //  8   30
+    LARGE_INTEGER   FuncPointer;        //  8   38
+    LARGE_INTEGER   LinePointer;        //  8   46
+    LARGE_INTEGER   ObjPointer;         //  8   54
     USHORT          SequenceId;         //  2   56
     DWORD           ProcessId;          //  4   60
     DWORD           ThreadId;           //  4   64
