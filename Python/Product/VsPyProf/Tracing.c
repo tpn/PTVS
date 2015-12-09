@@ -346,6 +346,41 @@ GetTraceStoresAllocationSize(void)
     return sizeof(TRACE_STORES);
 }
 
+LPVOID
+GetNextRecord(
+    PTRACE_STORE TraceStore,
+    LARGE_INTEGER RecordSize
+)
+{
+    DWORD_PTR AllocationSize;
+    LPVOID ReturnAddress;
+
+    if (!TraceStore) {
+        return NULL;
+    }
+
+    ReturnAddress = TraceStore->NextAddress;
+
+    if (sizeof(ReturnAddress) == sizeof(RecordSize.QuadPart)) {
+        AllocationSize = (DWORD_PTR)RecordSize.QuadPart;
+    } else {
+        // Ignore allocation attempts over 2GB on 32-bit.
+        if (RecordSize.HighPart != 0) {
+            return NULL;
+        }
+        AllocationSize = (DWORD_PTR)RecordSize.LowPart;
+    }
+
+    TraceStore->NextAddress = (LPVOID)(
+        (DWORD_PTR)ReturnAddress +
+        AllocationSize
+    );
+
+    TraceStore->RecordCount += 1;
+
+    return ReturnAddress;
+}
+
 #ifdef __cpp
 } // extern "C"
 #endif
