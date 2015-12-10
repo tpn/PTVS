@@ -20,6 +20,11 @@
 
 INIT_ONCE InitOnceFindLongestTraceStoreFileName = INIT_ONCE_STATIC_INIT;
 
+static DWORD DefaultTraceStoreCriticalSectionSpinCount = 4000;
+
+#define MAX_UNICODE_STRING 255
+#define _MAX_PATH MAX_UNICODE_STRING
+
 BOOL
 CALLBACK
 FindLongestTraceStoreFileNameCallback(
@@ -29,18 +34,25 @@ FindLongestTraceStoreFileNameCallback(
 )
 {
     DWORD Index;
-    LARGE_INTEGER Longest = { 0 };
-    LARGE_INTEGER Length = { 0 };
+    ULARGE_INTEGER Longest = { 0 };
+    ULARGE_INTEGER Length = { 0 };
+    DWORD MaxPath = (
+        _MAX_PATH -
+        3        - /* C:\ */
+        1        - // NUL
+        TraceStoreMetadataSuffixLength
+    );
 
     for (Index = 0; Index < NumberOfTraceStores; Index++) {
         LPCWSTR FileName = TraceStoreFileNames[Index];
-        if (FAILED(StringCchLengthW(FileName, MAX_PATH-5, &Length.QuadPart))) {
+        if (FAILED(StringCchLengthW(FileName, MaxPath, &Length.QuadPart))) {
             return FALSE;
         }
         if (Length.QuadPart > Longest.QuadPart) {
             Longest.QuadPart = Length.QuadPart;
         }
     }
+    Longest.QuadPart += TraceStoreMetadataSuffixLength;
 
     *((PDWORD64)lpContext) = Longest.QuadPart;
 
@@ -51,7 +63,7 @@ DWORD
 GetLongestTraceStoreFileName()
 {
     BOOL  Status;
-    LARGE_INTEGER Longest;
+    ULARGE_INTEGER Longest;
 
     Status = InitOnceExecuteOnce(
         &InitOnceFindLongestTraceStoreFileName,
@@ -83,22 +95,36 @@ RefreshTraceStoreFileInfo(PTRACE_STORE TraceStore)
 }
 
 BOOL
-InitializeTraceStore(
-    LPCWSTR Path,
-    PTRACE_STORE TraceStore,
-    DWORD InitialSize
+InitializeStore(
+    _In_        PCWSTR Path,
+    _Inout_     PTRACE_STORE TraceStore,
+    _In_opt_    DWORD InitialSize,
+    _In_opt_    DWORD CriticalSectionSpinCount
 )
 {
     BOOL Success;
-    TraceStore->FileHandle = CreateFileW(
-        Path,
-        GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ,
-        NULL,
-        CREATE_ALWAYS,
-        FILE_FLAG_OVERLAPPED,
-        NULL
-    );
+    HRESULT Result;
+    DWORD SpinCount = CriticalSectionSpinCount;
+
+    if (!Path || !TraceStore) {
+        return FALSE;
+    }
+
+    if (!SpinCount) {
+        SpinCount = CriticalSectionSpinCount;
+    }
+
+    if (!TraceStore->FileHandle) {
+        TraceStore->FileHandle = CreateFileW(
+            Path,
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ,
+            NULL,
+            CREATE_ALWAYS,
+            FILE_FLAG_OVERLAPPED,
+            NULL
+        );
+    }
 
     if (TraceStore->FileHandle == INVALID_HANDLE_VALUE) {
         goto error;
@@ -175,23 +201,188 @@ error:
 }
 
 BOOL
+InitializeTraceStore(
+    _In_        PCWSTR Path,
+    _Inout_     PTRACE_STORE TraceStore,
+    _Inout_     PTRACE_STORE MetadataStore,
+    _In_opt_    DWORD InitialSize,
+    _In_opt_    DWORD CriticalSectionSpinCount
+)
+{
+    BOOL Success;
+    HRESULT Result;
+    DWORD SpinCount = CriticalSectionSpinCount;
+    WCHAR MetadataPath[_MAX_PATH];
+
+    if (!Path || !TraceStore) {
+        return FALSE;
+    }
+
+    if (!SpinCount) {
+        SpinCount = CriticalSectionSpinCount;
+    }
+
+    SecureZeroMemory(&MetadataPath, sizeof(MetadataPath));
+    Result = StringCchCopyW(
+        &MetadataPath[0],
+        _MAX_PATH,
+        Path
+    );
+    if (FAILED(Result)) {
+        return FALSE;
+    }
+
+    Result = StringCchCatW(
+        &MetadataPath[0],
+        _MAX_PATH,
+        TraceStoreMetadataSuffix
+    );
+    if (FAILED(Result)) {
+        return FALSE;
+    }
+
+    // Create the data file first, before the :metadata stream.
+    TraceStore->FileHandle = CreateFileW(
+        Path,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_FLAG_OVERLAPPED,
+        NULL
+    );
+
+    if (TraceStore->FileHandle == INVALID_HANDLE_VALUE) {
+        goto error;
+    }
+
+    Success = InitializeStore(
+        &MetadataPath[0],
+        MetadataStore,
+        sizeof(TRACE_STORE_METADATA),
+        0
+    );
+
+    if (!Success) {
+        return FALSE;
+    }
+
+    MetadataStore->NumberOfRecords = 1;
+    MetadataStore->RecordSize = sizeof(TRACE_STORE_METADATA);
+
+    TraceStore->MetadataStore = MetadataStore;
+    TraceStore->pMetadata = (PTRACE_STORE_METADATA)MetadataStore->BaseAddress;
+
+    Success = InitializeCriticalSectionAndSpinCount(
+        &TraceStore->CriticalSection,
+        SpinCount
+    );
+    if (!Success) {
+        return FALSE;
+    }
+
+    TraceStore->MetadataHandle = CreateFileW(
+        Path,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_FLAG_OVERLAPPED,
+        NULL
+    );
+    if (TraceStore->MetadataHandle == INVALID_HANDLE_VALUE) {
+        goto error;
+    }
+
+    if (!RefreshTraceStoreFileInfo(TraceStore)) {
+        goto error;
+    }
+
+    TraceStore->MappingSize.HighPart = 0;
+    TraceStore->MappingSize.LowPart = InitialSize;
+
+    // If the allocated size of the underlying file is less than our desired
+    // mapping size (which is primed by the InitialSize parameter), extend the
+    // file to that length (via SetFilePointerEx(), then SetEndOfFile()).
+    if (TraceStore->FileInfo.AllocationSize.QuadPart < TraceStore->MappingSize.QuadPart) {
+        LARGE_INTEGER StartOfFile = { 0 };
+        Success = SetFilePointerEx(
+            TraceStore->FileHandle,
+            TraceStore->MappingSize,
+            NULL,
+            FILE_BEGIN
+        );
+        if (!Success) {
+            goto error;
+        }
+        // Extend the file.
+        if (!SetEndOfFile(TraceStore->FileHandle)) {
+            goto error;
+        }
+        // Reset the file pointer back to the start.
+        Success = SetFilePointerEx(
+            TraceStore->FileHandle,
+            StartOfFile,
+            NULL,
+            FILE_BEGIN
+        );
+        if (!Success) {
+            goto error;
+        }
+    }
+
+    TraceStore->MappingHandle = CreateFileMapping(
+        TraceStore->FileHandle,
+        NULL,
+        PAGE_READWRITE,
+        0,
+        TraceStore->MappingSize.LowPart,
+        NULL
+    );
+
+    if (TraceStore->MappingHandle == INVALID_HANDLE_VALUE) {
+        goto error;
+    }
+
+    TraceStore->BaseAddress = MapViewOfFile(
+        TraceStore->MappingHandle,
+        FILE_MAP_READ | FILE_MAP_WRITE,
+        0,
+        0,
+        TraceStore->MappingSize.LowPart
+    );
+
+    if (!TraceStore->BaseAddress) {
+        goto error;
+    }
+
+    TraceStore->NextAddress = TraceStore->BaseAddress;
+
+    return TRUE;
+error:
+    CloseTraceStore(TraceStore);
+    return FALSE;
+}
+
+BOOL
 InitializeTraceStores(
-    LPWSTR BaseDirectory,
-    PTRACE_STORES TraceStores,
-    LPDWORD InitialFileSizes
+    _In_        LPWSTR          BaseDirectory,
+    _Out_       PTRACE_STORES   TraceStores,
+    _In_opt_    LPDWORD         InitialFileSizes,
+    _In_opt_    DWORD           CriticalSectionSpinCount
 )
 {
     BOOL Success;
     HRESULT Result;
     DWORD Index;
     DWORD LastError;
-    WCHAR Path[MAX_PATH];
+    WCHAR Path[_MAX_PATH];
     LPWSTR FileNameDest;
     DWORD LongestFilename = GetLongestTraceStoreFileName();
     DWORD LongestPossibleDirectoryLength = (
-        MAX_PATH -
-        1        - // '\'
-        1        - // final NUL
+        _MAX_PATH -
+        1         - // '\'
+        1         - // final NUL
         LongestFilename
     );
     LARGE_INTEGER DirectoryLength;
@@ -237,7 +428,7 @@ InitializeTraceStores(
     Path[DirectoryLength.LowPart] = L'\\';
     FileNameDest = &Path[DirectoryLength.LowPart+1];
     RemainingChars.QuadPart = (
-        MAX_PATH -
+        _MAX_PATH -
         DirectoryLength.LowPart -
         2
     );
@@ -262,7 +453,12 @@ InitializeTraceStores(
             SetLastError(ERROR_INSUFFICIENT_BUFFER);
             return FALSE;
         }
-        Result = InitializeTraceStore(Path, TraceStore, InitialSize);
+        Result = InitializeTraceStore(
+            Path,
+            TraceStore,
+            InitialSize,
+            CriticalSectionSpinCount
+        );
         if (FAILED(Result)) {
             return FALSE;
         }
@@ -271,14 +467,19 @@ InitializeTraceStores(
     return TRUE;
 }
 
-void
-CloseTraceStore(PTRACE_STORE TraceStore)
+VOID
+CloseStore(
+    _In_ PTRACE_STORE TraceStore
+)
 {
     if (!TraceStore) {
         return;
     }
 
+    EnterCriticalSection(&TraceStore->CriticalSection);
+
     if (TraceStore->BaseAddress) {
+        FlushViewOfFile(TraceStore->BaseAddress, 0);
         UnmapViewOfFile(TraceStore->BaseAddress);
         TraceStore->BaseAddress = NULL;
     }
@@ -289,9 +490,31 @@ CloseTraceStore(PTRACE_STORE TraceStore)
     }
 
     if (TraceStore->FileHandle) {
+        FlushFileBuffers(TraceStore->FileHandle);
         CloseHandle(TraceStore->FileHandle);
         TraceStore->FileHandle = NULL;
     }
+
+    DeleteCriticalSection(&TraceStore->CriticalSection);
+}
+
+VOID
+CloseTraceStore(
+    _In_ PTRACE_STORE TraceStore
+)
+{
+    if (!TraceStore) {
+        return;
+    }
+
+    if (TraceStore->MetadataStore) {
+        ULARGE_INTEGER NumberOfRecords;
+        NumberOfRecords.QuadPart = TraceStore->pNumberOfRecords->QuadPart;
+        CloseStore(TraceStore->MetadataStore);
+        TraceStore->MetadataStore = NULL;
+    }
+
+    CloseStore(TraceStore);
 }
 
 void
@@ -311,17 +534,19 @@ CloseTraceStores(PTRACE_STORES TraceStores)
 BOOL
 GetTraceStoreBytesWritten(
     PTRACE_STORE TraceStore,
-    PLARGE_INTEGER BytesWritten
+    PULARGE_INTEGER BytesWritten
 )
 {
     if (!TraceStore || !TraceStore->BaseAddress || !BytesWritten) {
         return FALSE;
     }
 
+    EnterCriticalSection(&TraceStore->CriticalSection);
     BytesWritten->QuadPart = (
         (DWORD_PTR)TraceStore->NextAddress -
         (DWORD_PTR)TraceStore->BaseAddress
     );
+    LeaveCriticalSection(&TraceStore->CriticalSection);
 
     return TRUE;
 }
@@ -329,14 +554,16 @@ GetTraceStoreBytesWritten(
 BOOL
 GetTraceStoreRecordCount(
     PTRACE_STORE TraceStore,
-    PLARGE_INTEGER RecordCount
+    PULARGE_INTEGER RecordCount
 )
 {
     if (!TraceStore) {
         return FALSE;
     }
 
+    EnterCriticalSection(&TraceStore->CriticalSection);
     RecordCount->QuadPart = TraceStore->RecordCount.QuadPart;
+    LeaveCriticalSection(&TraceStore->CriticalSection);
     return TRUE;
 }
 
@@ -347,9 +574,10 @@ GetTraceStoresAllocationSize(void)
 }
 
 LPVOID
-GetNextRecord(
+AllocateRecords(
     PTRACE_STORE TraceStore,
-    LARGE_INTEGER RecordSize
+    ULARGE_INTEGER RecordSize,
+    ULARGE_INTEGER NumberOfRecords
 )
 {
     DWORD_PTR AllocationSize;
@@ -359,26 +587,78 @@ GetNextRecord(
         return NULL;
     }
 
-    ReturnAddress = TraceStore->NextAddress;
-
-    if (sizeof(ReturnAddress) == sizeof(RecordSize.QuadPart)) {
-        AllocationSize = (DWORD_PTR)RecordSize.QuadPart;
+    if (sizeof(TraceStore->NextAddress) == sizeof(RecordSize.QuadPart)) {
+        AllocationSize = (DWORD_PTR)(
+            RecordSize.QuadPart *
+            NumberOfRecords.QuadPart
+        );
     } else {
+        ULARGE_INTEGER Size = { 0 };
         // Ignore allocation attempts over 2GB on 32-bit.
-        if (RecordSize.HighPart != 0) {
+        if (RecordSize.HighPart != 0 || NumberOfRecords.HighPart != 0) {
             return NULL;
         }
-        AllocationSize = (DWORD_PTR)RecordSize.LowPart;
+        Size.QuadPart = UInt32x32To64(RecordSize.LowPart, NumberOfRecords.LowPart);
+        if (Size.HighPart != 0) {
+            return NULL;
+        }
+        AllocationSize = (DWORD_PTR)Size.LowPart;
     }
+
+    EnterCriticalSection(&TraceStore->CriticalSection);
+
+    ReturnAddress = TraceStore->NextAddress;
 
     TraceStore->NextAddress = (LPVOID)(
         (DWORD_PTR)ReturnAddress +
         AllocationSize
     );
 
-    TraceStore->RecordCount += 1;
+    TraceStore->pNumberOfRecords->QuadPart += NumberOfRecords.QuadPart;
+
+    LeaveCriticalSection(&TraceStore->CriticalSection);
 
     return ReturnAddress;
+}
+
+LPVOID
+GetNextRecord(
+    PTRACE_STORE TraceStore,
+    ULARGE_INTEGER RecordSize
+)
+{
+    ULARGE_INTEGER RecordCount = { 1 };
+    return AllocateRecords(TraceStore, RecordSize, RecordCount);
+}
+
+VOID
+RecordName(
+    _Inout_ PTRACE          TraceContext,
+    _In_    DWORD_PTR       Address,
+    _In_    PUNICODE_STRING String,
+)
+{
+
+}
+
+VOID
+RecordModule(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    PUNICODE_STRING ModuleName,
+);
+
+
+VOID
+RecordFunction(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    PUNICODE_STRING FunctionName,
+    _In_    LONG            LineNumber
+)
+{
+
 }
 
 #ifdef __cpp
