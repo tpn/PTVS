@@ -1576,6 +1576,7 @@ void Attach() {
     DWORD modSize = sizeof(HMODULE) * 1024;
     HMODULE* hMods = (HMODULE*)_malloca(modSize);
     DWORD modsNeeded;
+	__debugbreak();
     if (hMods == nullptr) {
         modsNeeded = 0;
         return;

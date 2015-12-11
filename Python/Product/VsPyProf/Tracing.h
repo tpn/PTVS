@@ -111,9 +111,9 @@ typedef struct _TRACE_STORE {
     HANDLE                  MappingHandle;
     LARGE_INTEGER           MappingSize;
     FILE_STANDARD_INFO      FileInfo;
-    CRITICAL_SECTION        CriticalSection;
-    LPVOID                  BaseAddress;
-    LPVOID                  NextAddress;
+    PCRITICAL_SECTION       CriticalSection;
+    PVOID                   BaseAddress;
+    PVOID                   NextAddress;
     PTRACE_STORE            MetadataStore;
     union {
         union {
@@ -123,7 +123,7 @@ typedef struct _TRACE_STORE {
             };
             TRACE_STORE_METADATA Metadata;
         };
-        PULARGE_INTEGER pNumberOfRecords;
+        PTRACE_STORE_METADATA pMetadata;
     };
 } TRACE_STORE, *PTRACE_STORE;
 
@@ -171,6 +171,22 @@ typedef struct _TRACE_STORES {
 } TRACE_STORES, *PTRACE_STORES;
 
 typedef struct _TRACE_SESSION TRACE_SESSION, *PTRACE_SESSION;
+typedef struct _TRACE_CONTEXT TRACE_CONTEXT, *PTRACE_CONTEXT;
+
+typedef struct _PYTRACE_INFO {
+    PVOID   FramePyObject;
+    LONG    What;
+    union {
+        PVOID   ArgPyObject;
+        PVOID   FunctionPyCodeObject;
+    };
+    PVOID   ModuleFilenamePyObject;
+    PCWSTR  ModuleFilename;
+    PCWSTR  ModuleName;
+    PCWSTR  FunctionName;
+    PCWSTR  Line;
+    DWORD   LineNumber;
+} PYTRACE_INFO, *PPYTRACE_INFO;
 
 typedef VOID (*PRECORD_NAME_CALLBACK)(
     _Inout_ PTRACE_CONTEXT  TraceContext,
@@ -192,16 +208,7 @@ typedef VOID (*PRECORD_FUNCTION_CALLBACK)(
     _In_    PUNICODE_STRING FunctionName,
     _In_    LONG            LineNumber
 );
-
-// Called for each PyTrace_LINE.
-typedef VOID (*PTRACE_LINE_CALLBACK)(
-    _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       ModuleAddress,
-    _In_    DWORD_PTR       FunctionAddress,
-    _In_    DWORD_PTR       FrameAddress,
-    _In_    LONG            LineNumber
-);
-
+//
 // Called once for each unique (ModuleAddress, ModuleName, ModulePath).
 typedef VOID (*PRECORD_SOURCE_FILE_CALLBACK)(
     _Inout_ PTRACE_CONTEXT  TraceContext,
@@ -210,11 +217,85 @@ typedef VOID (*PRECORD_SOURCE_FILE_CALLBACK)(
     _In_    PUNICODE_STRING ModulePath
 );
 
-typedef VOID (*PRECORD_SOURCE_LINE_CALLBACK)(
+typedef VOID (*PRECORD_CALLBACK)(VOID);
+
+typedef struct _RECORD_CALLBACKS {
+    union {
+        PRECORD_CALLBACK Callbacks[3];
+        struct {
+            PRECORD_NAME_CALLBACK       RecordName;
+            PRECORD_MODULE_CALLBACK     RecordModule;
+            PRECORD_FUNCTION_CALLBACK   RecordFunction;
+        };
+    };
+} RECORD_CALLBACKS, *PRECORD_CALLBACKS;
+
+typedef VOID (*PTRACE_CALL_CALLBACK)(
     _Inout_ PTRACE_CONTEXT  TraceContext,
     _In_    DWORD_PTR       ModuleAddress,
-    _In_    DWORD_PTR       ModuleName,
-    _In_    PUNICODE_STRING ModulePath
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    DWORD_PTR       ObjectAddress,
+    _In_    LONG            LineNumber
+);
+
+typedef VOID (*PTRACE_EXCEPTION_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    LONG            LineNumber,
+    _In_    DWORD_PTR       ExceptionAddress
+);
+
+typedef VOID (*PTRACE_LINE_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    LONG            LineNumber
+);
+
+typedef VOID (*PTRACE_LINE_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    LONG            LineNumber
+);
+
+typedef VOID (*PTRACE_RETURN_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    LONG            LineNumber
+);
+
+typedef VOID (*PTRACE_C_CALL_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    DWORD_PTR       ObjectAddress,
+    _In_    LONG            LineNumber
+);
+
+typedef VOID (*PTRACE_C_EXCEPTION_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    LONG            LineNumber,
+    _In_    DWORD_PTR       ExceptionAddress
+);
+
+typedef VOID (*PTRACE_C_RETURN_CALLBACK)(
+    _Inout_ PTRACE_CONTEXT  TraceContext,
+    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       FunctionAddress,
+    _In_    DWORD_PTR       FrameAddress,
+    _In_    LONG            LineNumber
 );
 
 typedef VOID (*PPYTRACE_CALLBACK)(VOID);
@@ -231,21 +312,8 @@ typedef struct _PYTRACE_CALLBACKS {
             PTRACE_C_EXCEPTION_CALLBACK TraceCException;
             PTRACE_C_RETURN_CALLBACK    TraceCReturn;
         };
-    }
-} PYTRACE_CALLBACKS, *PPYTRACE_CALLBACKS;
-
-typedef VOID (*PRECORD_CALLBACK)(VOID);
-
-typedef struct _RECORD_CALLBACKS {
-    union {
-        PRECORD_CALLBACK Callbacks[3];
-        struct {
-            PRECORD_NAME_CALLBACK       RecordName;
-            PRECORD_MODULE_CALLBACK     RecordModule;
-            PRECORD_FUNCTION_CALLBACK   RecordFunction;
-        };
     };
-} RECORD_CALLBACKS, *PRECORD_CALLBACKS;
+} PYTRACE_CALLBACKS, *PPYTRACE_CALLBACKS;
 
 typedef BOOL (*PPYTRACE)(LPVOID Frame, INT What, LPVOID Arg);
 
@@ -271,9 +339,9 @@ VSPYPROF_API
 BOOL
 InitializeTraceStores(
     _In_        PWSTR           BaseDirectory,
-    _Inout_     PTRACE_STORES   TraceStores,
-    _In_opt_    PDWORD          InitialFileSizes,
-    _In_opt_    DWORD           CriticalSectionSpinCount
+    _Inout_opt_ PTRACE_STORES   TraceStores,
+    _Inout_     PDWORD          SizeOfTraceStores,
+    _In_opt_    PDWORD          InitialFileSizes
 );
 
 VSPYPROF_API
@@ -297,9 +365,9 @@ GetTraceStoreBytesWritten(
 
 VSPYPROF_API
 BOOL
-GetTraceStoreRecordCount(
+GetTraceStoreNumberOfRecords(
     PTRACE_STORE TraceStore,
-    PULARGE_INTEGER RecordCount
+    PULARGE_INTEGER NumberOfRecords
 );
 
 VSPYPROF_API
@@ -319,29 +387,33 @@ GetNextRecords(
 
 VSPYPROF_API
 VOID
-RecordName(
-    _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       Address,
-    _In_    PUNICODE_STRING String
+RegisterName(
+    _Inout_     PTRACE_CONTEXT  TraceContext,
+    _In_        DWORD_PTR       NameToken,
+    _In_        PCWSTR          Name
 );
 
 VSPYPROF_API
 VOID
-RecordModule(
-    _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       ModuleAddress,
-    _In_    PUNICODE_STRING ModuleName,
+RegisterFunction(
+    _Inout_     PTRACE_CONTEXT  TraceContext,
+    _In_        DWORD_PTR       FunctionToken,
+    _In_        PCWSTR          FunctionName,
+    _In_        DWORD           LineNumber,
+    _In_opt_    DWORD_PTR       ModuleToken,
+    _In_opt_    PCWSTR          ModuleName,
+    _In_opt_    PCWSTR          ModuleFilename
 );
 
 VSPYPROF_API
 VOID
-RecordFunction(
-    _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       ModuleAddress,
-    _In_    DWORD_PTR       FunctionAddress,
-    _In_    PUNICODE_STRING FunctionName,
-    _In_    LONG            LineNumber
+RegisterModule(
+    _Inout_     PTRACE_CONTEXT  TraceContext,
+    _In_        DWORD_PTR       ModuleToken,
+    _In_        PCWSTR          ModuleName,
+    _In_        PCWSTR          ModuleFilename
 );
+
 
 #ifdef __cpp
 } // extern "C"

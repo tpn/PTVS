@@ -24,6 +24,7 @@
 #include "VSPerf.h"
 #include <unordered_set>
 #include <unordered_map>
+#include <tuple>
 #include <string>
 #include <strsafe.h>
 #include "SourceFile.h"
@@ -56,7 +57,56 @@ typedef wchar_t* PyUnicode_AsUnicode(PyObject *unicode           /* Unicode obje
 typedef size_t PyUnicode_GetLength(PyObject *unicode);
 typedef int PyFrame_GetLineNumber(PyFrameObject *f);
 
+class PyTraceInfo {
+public:
+    union {
+        PyFrameObject   *FrameObject;
+        DWORD_PTR        FrameToken;
+    };
+    int What;
+    union {
+        PyObject        *ArgObject;
+        PyObject        *CodeObject;
+        DWORD_PTR        FunctionToken;
+    };
+    PCWSTR FunctionName;
+    PCWSTR Line;
+    DWORD  LineNumber;
+    union {
+        PyObject        *ModuleFilenameObject;
+        DWORD_PTR        ModuleToken;
+    };
+    PCWSTR ModuleName;
+    PCWSTR ModuleFilename;
+};
+
 class VsPyProf;
+
+class Tracer {
+public:
+    void
+    RegisterName(
+        _In_        DWORD_PTR       NameToken,
+        _In_        PCWSTR          Name
+    );
+
+    void
+    RegisterFunction(
+        _In_        DWORD_PTR       FunctionToken,
+        _In_        PCWSTR          FunctionName,
+        _In_        DWORD           LineNumber,
+        _In_opt_    DWORD_PTR       ModuleToken,
+        _In_opt_    PCWSTR          ModuleName,
+        _In_opt_    PCWSTR          ModuleFilename
+    );
+
+    void
+    RegisterModule(
+        _In_        DWORD_PTR       ModuleToken,
+        _In_        PCWSTR          ModuleName,
+        _In_        PCWSTR          ModuleFilename
+    );
+};
 
 class VsPyProfThread : public PyObject {
     VsPyProf* _profiler;
@@ -67,17 +117,41 @@ public:
     ~VsPyProfThread();
     VsPyProf* GetProfiler();
 
-    int Profile(PyFrameObject *frame, int what, PyObject *arg);
+    bool IsTracing()
+    {
+        if (_profiler) {
+            return _profiler->IsTracing();
+        } else {
+            return false;
+        }
+    }
+
     int Trace(PyFrameObject *frame, int what, PyObject *arg);
 };
+
+class PyTraceThread : public VsPyProfThread {
+    Tracer *_tracer;
+public:
+    PyTraceThread(VsPyProf* profiler);
+    ~PyTraceThread();
+    Tracer *GetTracer() { return _tracer; };
+
+    int Trace(PyFrameObject *frame, int what, PyObject *arg);
+};
+
 
 // Implements Python profiling.  Supports multiple Python versions (2.4 - 3.4) simultaneously.
 // This code is always called w/ the GIL held (either from a ctypes call where we're a PyDll or
 // from the runtime for our trace func).
 class VsPyProf {
     friend class VsPyProfThread;
+    //friend class Tracer;
 
+    Tracer* _tracer;
     bool _isTracing;
+    DWORD _processId;
+    DWORD _threadId;
+
     HMODULE _profileModule;
     HMODULE _pythonModule;
     PyEval_SetProfileFunc* _setProfileFunc;
@@ -87,10 +161,14 @@ class VsPyProf {
     PyUnicode_GetLength* _unicodeGetLength;
     PyFrame_GetLineNumber* _frameGetLineNumber;
 
-    unordered_set<DWORD_PTR> _registeredObjects;
+    unordered_map<DWORD_PTR, PyTraceInfo> _traceInfo;
+
+    unordered_set<DWORD_PTR> _registeredObjects; // functions
     unordered_set<PyObject*> _referencedObjects;
     unordered_map<DWORD_PTR, wstring> _registeredModules;
-    unordered_map<DWORD_PTR, SourceFile*> _sourceFiles;
+    unordered_map<DWORD_PTR, SourceFile*> _sourceFiles; // function token <-> Source File
+    unordered_map<DWORD_PTR, wstring> _names;
+    unordered_map<DWORD_PTR, wstring> _filenames;
 
     // Python type objects
     PyObject* PyCode_Type;
@@ -113,6 +191,7 @@ class VsPyProf {
     ExitFunctionFunc _exitFunction;
     NameTokenFunc _nameToken;
     SourceLineFunc _sourceLine;
+    //TraceLineFunc _traceLine;
 
     VsPyProf(HMODULE pythonModule, int majorVersion, int minorVersion, PVSPERF vsperf, PyObject* pyCodeType, PyObject* pyStringType, PyObject* pyUnicodeType, PyEval_SetProfileFunc* setProfileFunc, PyEval_SetTraceFunc* setTraceFunc, PyObject* cfunctionType, PyDict_GetItemString* getItemStringFunc, PyObject* pyDictType, PyObject* pyTupleType, PyObject* pyTypeType, PyObject* pyFuncType, PyObject* pyModuleType, PyObject* pyInstType, PyUnicode_AsUnicode* asUnicode, PyUnicode_GetLength* unicodeGetLength, PyFrame_GetLineNumber* frameGetLineNumber);
 
@@ -120,10 +199,30 @@ class VsPyProf {
     bool GetUserToken(PyFrameObject *frame, DWORD_PTR& func, DWORD_PTR& module);
     bool GetBuiltinToken(PyObject* codeObj, DWORD_PTR& func, DWORD_PTR& module);
     void GetModuleName(wstring module_name, wstring& finalName);
+
+    bool TraceUserFunction(PyFrameObject *frame, PyTraceInfo *info);
+    bool GetBuiltinToken(PyFrameObject *frame, PyTraceInfo *info);
+
+    bool GetModuleFilenameFromCodeObject(PyObject *codeObj, PyObject **filename);
+    static void EnsureQualifiedPath(wstring& filenameStr);
+    static void NormalizePathForVsPerfReport(wstring& filenameStr);
+    static void FixupModuleNameFromClassName(wstring &className, wstring &moduleName);
+
+    bool GetFunctionNameObjectAndLineNumberFromCodeObject(PyObject *codeObj, PyObject **funcname, PDWORD lineno);
+
+    bool RegisterFunction(
+        DWORD_PTR func,
+        DWORD_PTR module,
+        PyObject *codeObj,
+        wstring &moduleName,
+        wstring &moduleFilename,
+        PDWORD lineno
+    );
+
     wstring GetClassNameFromSelf(PyObject* self, PyObject *codeObj);
     wstring GetClassNameFromFrame(PyFrameObject* frameObj, PyObject *codeObj);
 
-    void RegisterName(DWORD_PTR token, PyObject* name, wstring* moduleName = nullptr);
+    void RegisterName(DWORD_PTR token, PyObject* name, wstring* moduleName, _Out_opt_ PCWSTR *funcname);
     bool GetName(PyObject* object, wstring& name);
     void GetNameAscii(PyObject* object, string& name);
 
@@ -151,7 +250,7 @@ public:
         return new VsPyProfThread(this);
     }
 
-    void SetTracing(void) { _isTracing = true; }
+    void SetTracing(void);
     void UnsetTracing(void) { _isTracing = false; }
     bool IsTracing(void) { return _isTracing; }
 

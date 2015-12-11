@@ -22,7 +22,9 @@
 // defined with this macro as being exported.
 #ifdef VSPYPROF_EXPORTS
 #define VSPYPROF_API __declspec(dllexport)
+#define VSPYPROF_DATA extern __declspec(dllexport)
 #else
 #define VSPYPROF_API __declspec(dllimport)
+#define eSPYPROF_DATA extern __declspec(dllimport)
 #endif
 

@@ -159,10 +159,22 @@ VsPyProf* VsPyProf::CreateCustom(
 }
 
 void VsPyProf::PyEval_SetProfile(Py_tracefunc func, PyObject* object) {
-    if (_isTracing)
+    if (IsTracing())
         _setTraceFunc(func, object);
     else
         _setProfileFunc(func, object);
+}
+
+void VsPyProf::SetTracing(void) {
+    _isTracing = true;
+    /*
+    if (_tracer) {
+        delete _tracer;
+        _tracer = nullptr;
+    }
+
+    _tracer = Tracer::Create(this);
+    */
 }
 
 void VsPyProf::LoadSourceFile(DWORD_PTR module, wstring& moduleName, wstring& filename)
@@ -176,107 +188,271 @@ void VsPyProf::LoadSourceFile(DWORD_PTR module, wstring& moduleName, wstring& fi
     }
 }
 
-bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR& module) {
+bool VsPyProf::GetModuleFilenameFromCodeObject(PyObject *codeObj, PyObject **filename)
+{
+    if (filename == nullptr) {
+        return false;
+    }
+
+    if (PyCodeObject25_27::IsFor(MajorVersion, MinorVersion)) {
+        *filename = ((PyCodeObject25_27*)codeObj)->co_filename;
+    } else if (PyCodeObject30_32::IsFor(MajorVersion, MinorVersion)) {
+        *filename = ((PyCodeObject30_32*)codeObj)->co_filename;
+    } else if (PyCodeObject33_35::IsFor(MajorVersion, MinorVersion)) {
+        *filename = ((PyCodeObject33_35*)codeObj)->co_filename;
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+void VsPyProf::EnsureQualifiedPath(wstring& filenameStr)
+{
+    bool qualify = (
+        (filenameStr.length() >= 2 && (
+            filenameStr[0] != '\\' || filenameStr[1] != '\\')
+        ) &&
+        (filenameStr.length() >= 3 && (
+            filenameStr[1] != ':' || filenameStr[2] != '\\')
+        )
+    );
+    if (qualify) {
+        // not a fully qualified path, fully qualify it.
+        wchar_t buffer[MAX_PATH];
+        if (GetCurrentDirectory(MAX_PATH, buffer) != 0) {
+            if (filenameStr[0] != '\\' &&
+                wcslen(buffer) > 0 &&
+                buffer[wcslen(buffer) - 1] != '\\')
+            {
+                filenameStr.insert(0, L"\\");
+            }
+            filenameStr.insert(0, buffer);
+        }
+    }
+}
+
+void
+VsPyProf::NormalizePathForVsPerfReport(wstring &filenameStr)
+{
+    // make sure we only have valid path chars, vsperfreport doesn't like invalid chars
+    for (size_t i = 0; i < filenameStr.length(); i++) {
+        if (filenameStr[i] == '<') {
+            filenameStr[i] = '(';
+        } else if (filenameStr[i] == '>') {
+            filenameStr[i] = ')';
+        } else if (filenameStr[i] == '|' ||
+            filenameStr[i] == '"' ||
+            filenameStr[i] == 124 ||
+            filenameStr[i] < 32) {
+                filenameStr[i] = '_';
+        }
+    }
+}
+
+void
+VsPyProf::FixupModuleNameFromClassName(wstring &className, wstring &moduleName)
+{
+    if (className.length() != 0) {
+        if (moduleName.length() != 0) {
+            moduleName.append(L".");
+            moduleName.append(className);
+        } else {
+            moduleName = className;
+        }
+    }
+}
+
+bool VsPyProf::GetFunctionNameObjectAndLineNumberFromCodeObject(
+    PyObject *codeObj,
+    PyObject **funcname,
+    PDWORD   lineno
+)
+{
+    if (!codeObj || !funcname || !lineno) {
+        return false;
+    }
+
+    if (PyCodeObject25_27::IsFor(MajorVersion, MinorVersion)) {
+        *funcname = ((PyCodeObject25_27*)codeObj)->co_name;
+        *lineno = ((PyCodeObject25_27*)codeObj)->co_firstlineno;
+    } else if (PyCodeObject30_32::IsFor(MajorVersion, MinorVersion)) {
+        *funcname = ((PyCodeObject30_32*)codeObj)->co_name;
+        *lineno = ((PyCodeObject30_32*)codeObj)->co_firstlineno;
+    } else if (PyCodeObject33_35::IsFor(MajorVersion, MinorVersion)) {
+        *funcname = ((PyCodeObject33_35*)codeObj)->co_name;
+        *lineno = ((PyCodeObject33_35*)codeObj)->co_firstlineno;
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+bool VsPyProf::RegisterFunction(
+    DWORD_PTR func,
+    DWORD_PTR module,
+    PyObject *codeObj,
+    wstring &moduleName,
+    wstring &moduleFilename,
+    PDWORD lineno
+)
+{
+    PCWSTR funcname;
+    PyObject *funcnameObj;
+
+    if (codeObj == nullptr || lineno == nullptr) {
+        return false;
+    }
+
+    if (!GetFunctionNameObjectAndLineNumberFromCodeObject(codeObj, &funcnameObj, lineno)) {
+        return false;
+    }
+
+    RegisterName(func, funcnameObj, &moduleName, &funcname);
+
+    if (_sourceLine) {
+        _sourceLine(func, module, *lineno);
+    }
+
+    if (IsTracing()) {
+        _tracer->RegisterFunction(
+            func,                       // FunctionToken
+            funcname,                   // FunctionName
+            *lineno,                    // LineNumber
+            module,                     // ModuleToken
+            moduleName.c_str(),         // ModuleName
+            moduleFilename.c_str()      // ModuleFilename
+        );
+    }
+    return true;
+}
+
+bool VsPyProf::GetUserToken(PyFrameObject* frameObj, DWORD_PTR& func, DWORD_PTR& module)
+{
     auto codeObj = frameObj->f_code;
-    if (codeObj->ob_type == PyCode_Type) {
-        // extract func and module tokens
-        PyObject *filename = nullptr;
-        func = (DWORD_PTR)codeObj;
+    if (codeObj->ob_type != PyCode_Type) {
+        return false;
+    }
 
-        if (PyCodeObject25_27::IsFor(MajorVersion, MinorVersion)) {
-            filename = ((PyCodeObject25_27*)codeObj)->co_filename;
-        } else if (PyCodeObject30_32::IsFor(MajorVersion, MinorVersion)) {
-            filename = ((PyCodeObject30_32*)codeObj)->co_filename;
-        } else if (PyCodeObject33_35::IsFor(MajorVersion, MinorVersion)) {
-            filename = ((PyCodeObject33_35*)codeObj)->co_filename;
-        }
-        module = (DWORD_PTR)filename;
+    // extract func and module tokens
+    PyObject *filename = nullptr;
+    func = (DWORD_PTR)codeObj;
 
-        // see if the function is registered
-        if (_registeredObjects.find(func) == _registeredObjects.end()) {
-            // get module name and register it if not already registered
-            auto moduleIter = _registeredModules.find(module);
+    if (!GetModuleFilenameFromCodeObject(codeObj, &filename)) {
+        return false;
+    }
 
-            wstring moduleName;
-            if (moduleIter == _registeredModules.end()) {
-                ReferenceObject(filename);
+    module = (DWORD_PTR)filename;
 
-                wstring filenameStr;
-                GetName(filename, filenameStr);
-
-                // make sure we have a fully qualified path so the profiler can find our files...
-                if ((filenameStr.length() >= 2 && (filenameStr[0] != '\\' || filenameStr[1] != '\\')) &&
-                    (filenameStr.length() >= 3 && (filenameStr[1] != ':' || filenameStr[2] != '\\'))) {
-                        // not a fully qualified path, fully qualify it.
-                        wchar_t buffer[MAX_PATH];
-                        if (GetCurrentDirectory(MAX_PATH, buffer) != 0) {
-                            if (filenameStr[0] != '\\' && wcslen(buffer) > 0 && buffer[wcslen(buffer) - 1] != '\\') {
-                                filenameStr.insert(0, L"\\");
-                            }
-                            filenameStr.insert(0, buffer);
-                        }
-                }
-
-                GetModuleName(filenameStr, moduleName);
-
-                _registeredModules[module] = moduleName;
-
-                if (IsTracing()) {
-                    LoadSourceFile(module, moduleName, filenameStr);
-                }
-
-                // make sure we only have valid path chars, vsperfreport doesn't like invalid chars
-                for (size_t i = 0; i < filenameStr.length(); i++) {
-                    if (filenameStr[i] == '<') {
-                        filenameStr[i] = '(';
-                    } else if (filenameStr[i] == '>') {
-                        filenameStr[i] = ')';
-                    } else if (filenameStr[i] == '|' ||
-                        filenameStr[i] == '"' ||
-                        filenameStr[i] == 124 ||
-                        filenameStr[i] < 32) {
-                            filenameStr[i] = '_';
-                    }
-                }
-                _nameToken(module, filenameStr.c_str());
-            } else {
-                moduleName = (*moduleIter).second;
-            }
-
-            auto className = GetClassNameFromFrame(frameObj, codeObj);
-            if (className.length() != 0) {
-                if (moduleName.length() != 0) {
-                    moduleName.append(L".");
-                    moduleName.append(className);
-                } else {
-                    moduleName = className;
-                }
-            }
-
-            ReferenceObject(codeObj);
-
-            // register function
-            _registeredObjects.insert(func);
-
-            // associate source information
-            int lineno = 0;
-            if (PyCodeObject25_27::IsFor(MajorVersion, MinorVersion)) {
-                RegisterName(func, ((PyCodeObject25_27*)codeObj)->co_name, &moduleName);
-                lineno = ((PyCodeObject25_27*)codeObj)->co_firstlineno;
-            } else if (PyCodeObject30_32::IsFor(MajorVersion, MinorVersion)) {
-                RegisterName(func, ((PyCodeObject30_32*)codeObj)->co_name, &moduleName);
-                lineno = ((PyCodeObject30_32*)codeObj)->co_firstlineno;
-            } else if (PyCodeObject33_35::IsFor(MajorVersion, MinorVersion)) {
-                RegisterName(func, ((PyCodeObject33_35*)codeObj)->co_name, &moduleName);
-                lineno = ((PyCodeObject33_35*)codeObj)->co_firstlineno;
-            }
-
-            // give the profiler the line number of this function
-            _sourceLine(func, module, lineno);
-        }
+    // see if the function is registered
+    if (_registeredObjects.find(func) != _registeredObjects.end()) {
         return true;
     }
-    return false;
+
+    // get module name and register it if not already registered
+    auto moduleIter = _registeredModules.find(module);
+
+    wstring moduleName;
+    wstring moduleFilename;
+    if (moduleIter == _registeredModules.end()) {
+        ReferenceObject(filename);
+
+        wstring filenameStr;
+        GetName(filename, filenameStr);
+        EnsureQualifiedPath(filenameStr);
+        GetModuleName(filenameStr, moduleName);
+        _registeredModules[module] = moduleName;
+        _filenames[module] = filenameStr;
+        moduleFilename = _filenames[module];
+        if (_nameToken) {
+            wstring normalizedName(filenameStr);
+            NormalizePathForVsPerfReport(normalizedName);
+            _nameToken(module, normalizedName.c_str());
+        }
+    } else {
+        moduleName = (*moduleIter).second;
+        moduleFilename = _filenames[module];
+    }
+
+    auto className = GetClassNameFromFrame(frameObj, codeObj);
+    FixupModuleNameFromClassName(className, moduleName);
+
+    ReferenceObject(codeObj);
+
+    _registeredObjects.insert(func);
+
+    DWORD lineno = 0;
+    RegisterFunction(func, module, codeObj, moduleName, moduleFilename, &lineno);
+
+    return true;
+}
+
+
+bool VsPyProf::TraceUserFunction(
+    PyFrameObject* frameObj,
+    PyTraceInfo* info
+)
+{
+    auto codeObj = frameObj->f_code;
+    if (codeObj->ob_type != PyCode_Type) {
+        return false;
+    }
+
+    // extract func and module tokens
+    PyObject *filename = nullptr;
+    DWORD_PTR func = (DWORD_PTR)codeObj;
+
+    if (!GetModuleFilenameFromCodeObject(codeObj, &filename)) {
+        return false;
+    }
+
+    DWORD_PTR module = (DWORD_PTR)filename;
+
+    auto traceIter = _traceInfo.find(func);
+    if (traceIter != _traceInfo.end()) {
+        //PyTraceInfo &src = (*traceIter).second;
+        //info->
+        *info = (*traceIter).second;
+        //PyTraceInfo *info = &(*_traceIter).second;
+        return true;
+    }
+
+    // get module name and register it if not already registered
+    auto moduleIter = _registeredModules.find(module);
+
+    wstring moduleName;
+    wstring moduleFilename;
+    if (moduleIter == _registeredModules.end()) {
+        ReferenceObject(filename);
+        wstring filenameStr;
+        GetName(filename, filenameStr);
+        EnsureQualifiedPath(filenameStr);
+        GetModuleName(filenameStr, moduleName);
+        _registeredModules[module] = moduleName;
+        _filenames[module] = filenameStr;
+        moduleFilename = _filenames[module];
+        _tracer->RegisterModule(
+            module,
+            _registeredModules[module].c_str(),
+            moduleFilename.c_str()
+        );
+        ReferenceObject(codeObj);
+    } else {
+        moduleName = (*moduleIter).second;
+        moduleFilename = _filenames[module];
+    }
+
+    auto className = GetClassNameFromFrame(frameObj, codeObj);
+    FixupModuleNameFromClassName(className, moduleName);
+
+    DWORD lineno = 0;
+    RegisterFunction(func, module, codeObj, moduleName, moduleFilename, &lineno);
+
+    if (_sourceLine) {
+        _sourceLine(func, module, lineno);
+    }
+    return true;
 }
 
 void VsPyProf::TraceLine(PyFrameObject* frameObj)
@@ -377,7 +553,13 @@ void VsPyProf::GetModuleName(wstring name, wstring& finalName) {
 
     wstring curName = name;
     if (name.length() >= wcslen(initModule) &&
-        name.compare(name.length() - wcslen(initModule), wcslen(initModule), initModule, wcslen(initModule)) == 0) {
+        name.compare(
+            name.length() - wcslen(initModule),
+            wcslen(initModule),
+            initModule,
+            wcslen(initModule)
+        ) == 0)
+    {
             // it's a package, we need to remove the first __init__.py and add the package name.
 
             // C:\Fob\Oar\baz\__init__.py -> C, Fob\Oar\Baz, __init__, .py
@@ -463,7 +645,7 @@ bool VsPyProf::GetBuiltinToken(PyObject* codeObj, DWORD_PTR& func, DWORD_PTR& mo
             if (((PyCFunctionObject*)codeObj)->m_self != nullptr) {
                 auto type = ((PyCFunctionObject*)codeObj)->m_self->ob_type;
 
-                // In Python3k module methods apparently have the module as their self, modules don't 
+                // In Python3k module methods apparently have the module as their self, modules don't
                 // actually have any interesting methods so we can always filter.
                 if (type != PyModule_Type) {
                     auto className = type->tp_name;
@@ -490,7 +672,7 @@ bool VsPyProf::GetBuiltinToken(PyObject* codeObj, DWORD_PTR& func, DWORD_PTR& mo
 
                 _registeredObjects.insert(module);
                 if (modulePyObj != nullptr) {
-                    RegisterName(module, modulePyObj);
+                    RegisterName(module, modulePyObj, nullptr, nullptr);
                 } else {
                     _nameToken(module, L"Unknown Module");
                 }
@@ -499,25 +681,6 @@ bool VsPyProf::GetBuiltinToken(PyObject* codeObj, DWORD_PTR& func, DWORD_PTR& mo
         return true;
     }
     return false;
-}
-
-
-void VsPyProf::RegisterName(DWORD_PTR token, PyObject* nameObj, wstring* moduleName) {
-    // register function
-    wstring name;
-    GetName((PyObject*)nameObj, name);
-
-    if (name.compare(L"<module>") == 0) {
-        name.clear();
-        if (moduleName != nullptr) {
-            name.append(*moduleName);
-            name.append(L" (module)");
-        }
-    } else if (moduleName != nullptr) {
-        name.insert(0, L".");
-        name.insert(0, *moduleName);
-    }
-    _nameToken(token, name.c_str());
 }
 
 bool VsPyProf::GetName(PyObject* object, wstring& name) {
@@ -538,6 +701,45 @@ bool VsPyProf::GetName(PyObject* object, wstring& name) {
         return false;
     }
     return true;
+}
+
+void
+VsPyProf::RegisterName(
+    DWORD_PTR token,
+    PyObject* nameObj,
+    wstring* moduleName,
+    _Out_opt_ PCWSTR* nameStr
+)
+{
+    // register function
+    wstring name;
+    GetName((PyObject*)nameObj, name);
+
+    if (name.compare(L"<module>") == 0) {
+        name.clear();
+        if (moduleName != nullptr) {
+            name.append(*moduleName);
+            name.append(L" (module)");
+        }
+    } else if (moduleName != nullptr) {
+        name.insert(0, L".");
+        name.insert(0, *moduleName);
+    }
+
+    if (_nameToken) {
+        _nameToken(token, name.c_str());
+    }
+
+    if (IsTracing()) {
+        // Persist the name via wstring such that the
+        // PWSTR we return will always be valid.
+        _names[token] = name;
+        wstring &newname = _names[token];
+        if (nameStr) {
+            *nameStr = newname.c_str();
+        }
+        _tracer->RegisterName(token, *nameStr);
+    }
 }
 
 void VsPyProf::GetNameAscii(PyObject* object, string& name) {
@@ -633,20 +835,11 @@ int VsPyProfThread::Profile(PyFrameObject *frame, int what, PyObject *arg) {
     return 0;
 }
 
-int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
+int VsPyProfThread::Profile(PyFrameObject *frame, int what, PyObject *arg) {
     DWORD_PTR func, module;
-
-    if (!_profiler->IsTracing()) {
-        return Profile(frame, what, arg);
-    }
-
-    int lineno = _profiler->_frameGetLineNumber(frame);
 
     switch (what) {
     case PyTrace_LINE:
-        if (_profiler->_isTracing && _profiler->GetUserToken(frame, func, module)) {
-            _profiler->TraceLine(frame);
-        }
         break;
     case PyTrace_CALL:
         if (++_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
@@ -672,3 +865,4 @@ int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
 
     return 0;
 }
+
