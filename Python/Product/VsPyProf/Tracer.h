@@ -21,12 +21,30 @@
 #include <vector>
 #include <tuple>
 #include <unordered_map>
+#include "PythonApi.h"
+#include "Tracing.h"
 
 using namespace std;
 
-typedef FileFunctionToLineNumberMap unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD>;
+//typedef FileFunctionToLineNumberMap unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD>;
 
-class Tracer2 {
+class Tracer : public ITracer {
+    VsPyProf *Profiler;
+
+    PTRACE_CONTEXT TraceContext;
+
+    HANDLE TraceDirectory;
+    HANDLE TraceFileHandle;
+
+    unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD> FileFuncToLine;
+    unordered_map<DWORD_PTR, LPCWSTR> Names;
+
+    Tracer(VsPyProf *Profiler);
+
+    Tracer& operator=(const Tracer&) { }
+    Tracer(const Tracer&) { }
+
+
 public:
     void
     RegisterName(
@@ -52,7 +70,7 @@ public:
     );
 };
 
-
+/*
 class Tracer {
     VsPyProf *Profiler;
 
@@ -114,4 +132,5 @@ public:
     );
 
 };
+*/
 

@@ -23,8 +23,13 @@
 #include <Windows.h>
 
 int TraceFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
+    return ((VsPyProfThread*)obj)->Trace(frame, what, arg);
+}
+
+int ProfileFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     return ((VsPyProfThread*)obj)->Profile(frame, what, arg);
 }
+
 
 extern "C" VSPYPROF_API VsPyProf* CreateProfiler(HMODULE module) {
     return VsPyProf::Create(module);

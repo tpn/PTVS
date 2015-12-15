@@ -649,20 +649,23 @@ GetNextRecord(
 }
 
 VOID
-RecordName(
+RegisterName(
     _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       Address,
-    _In_    PUNICODE_STRING String
+    _In_    DWORD_PTR       NameToken,
+    _In_    PCWSTR          Name
 )
 {
 
 }
 
 VOID
-RecordModule(
-    _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       ModuleAddress,
-    _In_    PUNICODE_STRING ModuleName
+RegisterFunction(
+    _In_        DWORD_PTR       FunctionToken,
+    _In_        PCWSTR          FunctionName,
+    _In_        DWORD           LineNumber,
+    _In_opt_    DWORD_PTR       ModuleToken,
+    _In_opt_    PCWSTR          ModuleName,
+    _In_opt_    PCWSTR          ModuleFilename
 )
 {
 

@@ -25,6 +25,6 @@
 #define VSPYPROF_DATA extern __declspec(dllexport)
 #else
 #define VSPYPROF_API __declspec(dllimport)
-#define eSPYPROF_DATA extern __declspec(dllimport)
+#define VSPYPROF_DATA extern __declspec(dllimport)
 #endif
 

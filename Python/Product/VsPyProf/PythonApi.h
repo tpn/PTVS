@@ -82,15 +82,15 @@ public:
 
 class VsPyProf;
 
-class Tracer {
+class ITracer {
 public:
-    void
+    virtual void
     RegisterName(
         _In_        DWORD_PTR       NameToken,
         _In_        PCWSTR          Name
     );
 
-    void
+    virtual void
     RegisterFunction(
         _In_        DWORD_PTR       FunctionToken,
         _In_        PCWSTR          FunctionName,
@@ -100,7 +100,7 @@ public:
         _In_opt_    PCWSTR          ModuleFilename
     );
 
-    void
+    virtual void
     RegisterModule(
         _In_        DWORD_PTR       ModuleToken,
         _In_        PCWSTR          ModuleName,
@@ -117,24 +117,18 @@ public:
     ~VsPyProfThread();
     VsPyProf* GetProfiler();
 
-    bool IsTracing()
-    {
-        if (_profiler) {
-            return _profiler->IsTracing();
-        } else {
-            return false;
-        }
-    }
+    bool IsTracing();
 
+    int Profile(PyFrameObject *frame, int what, PyObject *arg);
     int Trace(PyFrameObject *frame, int what, PyObject *arg);
 };
 
 class PyTraceThread : public VsPyProfThread {
-    Tracer *_tracer;
+    ITracer *_tracer;
 public:
     PyTraceThread(VsPyProf* profiler);
     ~PyTraceThread();
-    Tracer *GetTracer() { return _tracer; };
+    ITracer *GetTracer() { return _tracer; };
 
     int Trace(PyFrameObject *frame, int what, PyObject *arg);
 };

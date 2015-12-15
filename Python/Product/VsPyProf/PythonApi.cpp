@@ -835,7 +835,17 @@ int VsPyProfThread::Profile(PyFrameObject *frame, int what, PyObject *arg) {
     return 0;
 }
 
-int VsPyProfThread::Profile(PyFrameObject *frame, int what, PyObject *arg) {
+bool VsPyProfThread::IsTracing()
+{
+    if (_profiler) {
+        return _profiler->IsTracing();
+    }
+    else {
+        return false;
+    }
+}
+
+int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
     DWORD_PTR func, module;
 
     switch (what) {
