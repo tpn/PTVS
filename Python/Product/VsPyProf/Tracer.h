@@ -24,15 +24,17 @@
 
 using namespace std;
 
-typedef FileFunctionToLineNumberMap unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD>;
+//typedef FileFunctionToLineNumberMap unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD>;
 
-class Tracer2 {
+class Tracer {
 public:
     void
     RegisterName(
         _In_        DWORD_PTR       NameToken,
         _In_        PCWSTR          Name
-    );
+    )
+    {
+        
 
     void
     RegisterFunction(
@@ -52,7 +54,7 @@ public:
     );
 };
 
-
+/*
 class Tracer {
     VsPyProf *Profiler;
 
@@ -114,4 +116,5 @@ public:
     );
 
 };
+*/
 

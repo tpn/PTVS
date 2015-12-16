@@ -174,18 +174,25 @@ typedef struct _TRACE_SESSION TRACE_SESSION, *PTRACE_SESSION;
 typedef struct _TRACE_CONTEXT TRACE_CONTEXT, *PTRACE_CONTEXT;
 
 typedef struct _PYTRACE_INFO {
-    PVOID   FramePyObject;
+    union {
+        PVOID       FramePyObject;
+        DWORD_PTR   FrameToken;
+    };
     LONG    What;
     union {
-        PVOID   ArgPyObject;
-        PVOID   FunctionPyCodeObject;
+        PVOID       ArgPyObject;
+        PVOID       FunctionPyCodeObject;
+        DWORD_PTR   FunctionToken;
     };
-    PVOID   ModuleFilenamePyObject;
-    PCWSTR  ModuleFilename;
-    PCWSTR  ModuleName;
     PCWSTR  FunctionName;
     PCWSTR  Line;
     DWORD   LineNumber;
+    union {
+        PVOID       ModuleFilenamePyObject;
+        DWORD_PTR   ModuleToken;
+    };
+    PCWSTR  ModuleName;
+    PCWSTR  ModuleFilename;
 } PYTRACE_INFO, *PPYTRACE_INFO;
 
 typedef VOID (*PRECORD_NAME_CALLBACK)(
@@ -414,6 +421,12 @@ RegisterModule(
     _In_        PCWSTR          ModuleFilename
 );
 
+VSPYPROF_API
+VOID
+Trace(
+    _In_    PTRACE_CONTEXT  TraceContext,
+    _In_    PTRACE_INFO     TraceInfo
+);
 
 #ifdef __cpp
 } // extern "C"

@@ -651,8 +651,8 @@ GetNextRecord(
 VOID
 RecordName(
     _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       Address,
-    _In_    PUNICODE_STRING String
+    _In_    DWORD_PTR       Token,
+    _In_    PCWSTR          Name
 )
 {
 
@@ -661,7 +661,7 @@ RecordName(
 VOID
 RecordModule(
     _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       ModuleAddress,
+    _In_    DWORD_PTR       ModuleToken,
     _In_    PUNICODE_STRING ModuleName
 )
 {

@@ -24,15 +24,11 @@
 
 typedef int (*PTRACE_FUNCTION)(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg);
 
-int ProfileFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
-    return ((VsPyProfThread*)obj)->Profile(frame, what, arg);
-}
-
 int TraceFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
-    return ((VsPyProfThread*)obj)->Trace(frame, what, arg);
+    return ((PyTraceThread*)obj)->Trace(frame, what, arg);
 }
 
-extern "C" VSPYPROF_API VsPyProf* CreateProfiler(HMODULE module) {
+extern "C" VSPYPROF_API VsPyProf* CreateTracer(HMODULE module) {
     return VsPyProf::Create(module);
 }
 

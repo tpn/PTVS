@@ -106,6 +106,8 @@ public:
         _In_        PCWSTR          ModuleName,
         _In_        PCWSTR          ModuleFilename
     );
+
+    void Trace(PyTraceInfo *info);
 };
 
 class VsPyProfThread : public PyObject {
@@ -126,6 +128,7 @@ public:
         }
     }
 
+    int Profile(PyFrameObject *frame, int what, PyObject *arg);
     int Trace(PyFrameObject *frame, int what, PyObject *arg);
 };
 
