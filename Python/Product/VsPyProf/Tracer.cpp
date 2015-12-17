@@ -31,10 +31,46 @@ Tracer::~Tracer()
 
 }
 
-Tracer* Tracer::Create(
-    VsPyProf *Profiler,
-    LPCWSTR TraceDirectoryPath
+ITracer* Tracer::Create(
+    PCWSTR basedir,
+    VsPyProf *profiler
+)
+{
+    return nullptr;
+}
+
+void
+Tracer::RegisterName(
+_In_        DWORD_PTR       NameToken,
+_In_        PCWSTR          Name
+)
+{
+}
+
+void
+Tracer::RegisterFunction(
+_In_        DWORD_PTR       FunctionToken,
+_In_        PCWSTR          FunctionName,
+_In_        DWORD           LineNumber,
+_In_opt_    DWORD_PTR       ModuleToken,
+_In_opt_    PCWSTR          ModuleName,
+_In_opt_    PCWSTR          ModuleFilename
 )
 {
 
+}
+
+void
+Tracer::RegisterModule(
+_In_        DWORD_PTR       ModuleToken,
+_In_        PCWSTR          ModuleName,
+_In_        PCWSTR          ModuleFilename
+)
+{
+}
+
+int
+Tracer::Trace(PyFrameObject *frame, int what, PyObject *arg)
+{
+    return 0;
 }

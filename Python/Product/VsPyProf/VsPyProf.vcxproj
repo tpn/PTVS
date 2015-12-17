@@ -111,6 +111,7 @@
       <PrecompiledHeader />
     </ClCompile>
     <ClCompile Include="PythonApi.cpp" />
+    <ClCompile Include="PyTrace.cpp" />
     <ClCompile Include="SourceFile.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>

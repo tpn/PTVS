@@ -165,17 +165,18 @@ void VsPyProf::PyEval_SetProfile(Py_tracefunc func, PyObject* object) {
         _setProfileFunc(func, object);
 }
 
+/*
 void VsPyProf::SetTracing(void) {
     _isTracing = true;
-    /*
+
     if (_tracer) {
         delete _tracer;
         _tracer = nullptr;
     }
 
     _tracer = Tracer::Create(this);
-    */
 }
+*/
 
 void VsPyProf::LoadSourceFile(DWORD_PTR module, wstring& moduleName, wstring& filename)
 {
@@ -845,32 +846,36 @@ bool VsPyProfThread::IsTracing()
     }
 }
 
-int VsPyProfThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
-    DWORD_PTR func, module;
+PyTraceThread::~PyTraceThread()
+{
+}
+
+int PyTraceThread::Trace(PyFrameObject *frame, int what, PyObject *arg) {
+    //DWORD_PTR func, module;
 
     switch (what) {
     case PyTrace_LINE:
         break;
-    case PyTrace_CALL:
-        if (++_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
-            _profiler->_enterFunction(func, module);
-        }
-        break;
-    case PyTrace_RETURN:
-        if (_depth && --_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
-            _profiler->_exitFunction(func, module);
-        }
-        break;
-    case PyTrace_C_CALL:
-        if (++_depth > _skippedFrames && _profiler->GetBuiltinToken(arg, func, module)) {
-            _profiler->_enterFunction(func, module);
-        }
-        break;
-    case PyTrace_C_RETURN:
-        if (_depth && --_depth > _skippedFrames && _profiler->GetBuiltinToken(arg, func, module)) {
-            _profiler->_exitFunction(func, module);
-        }
-        break;
+    //case PyTrace_CALL:
+    //    if (++_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
+    //        _profiler->_enterFunction(func, module);
+    //    }
+    //    break;
+    //case PyTrace_RETURN:
+    //    if (_depth && --_depth > _skippedFrames && _profiler->GetUserToken(frame, func, module)) {
+    //        _profiler->_exitFunction(func, module);
+    //    }
+    //    break;
+    //case PyTrace_C_CALL:
+    //    if (++_depth > _skippedFrames && _profiler->GetBuiltinToken(arg, func, module)) {
+    //        _profiler->_enterFunction(func, module);
+    //    }
+    //    break;
+    //case PyTrace_C_RETURN:
+    //    if (_depth && --_depth > _skippedFrames && _profiler->GetBuiltinToken(arg, func, module)) {
+    //        _profiler->_exitFunction(func, module);
+    //    }
+    //    break;
     }
 
     return 0;

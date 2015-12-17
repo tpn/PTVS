@@ -22,14 +22,9 @@
 #include "PythonApi.h"
 #include <Windows.h>
 
-int TraceFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
-    return ((VsPyProfThread*)obj)->Trace(frame, what, arg);
-}
-
 int ProfileFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) {
     return ((VsPyProfThread*)obj)->Profile(frame, what, arg);
 }
-
 
 extern "C" VSPYPROF_API VsPyProf* CreateProfiler(HMODULE module) {
     return VsPyProf::Create(module);
@@ -43,28 +38,6 @@ extern "C" VSPYPROF_API VsPyProf* CreateCustomProfiler(
     return VsPyProf::CreateCustom(profilerdll, pythondll);
 }
 
-extern "C" VSPYPROF_API void SetTracing(VsPyProf* profiler) {
-    if (!profiler) {
-        return;
-    }
-    profiler->SetTracing();
-    return;
-}
-
-extern "C" VSPYPROF_API void UnsetTracing(VsPyProf* profiler) {
-    if (!profiler) {
-        return;
-    }
-    profiler->UnsetTracing();
-    return;
-}
-
-extern "C" VSPYPROF_API bool IsTracing(VsPyProf* profiler) {
-    if (!profiler) {
-        return false;
-    }
-    return profiler->IsTracing();
-}
 
 extern "C" VSPYPROF_API VsPyProfThread* InitProfiler(VsPyProf* profiler) {
     if (!profiler) {
@@ -74,7 +47,7 @@ extern "C" VSPYPROF_API VsPyProfThread* InitProfiler(VsPyProf* profiler) {
     auto thread = profiler->CreateThread();
 
     if (thread != nullptr) {
-        thread->GetProfiler()->PyEval_SetProfile(&TraceFunction, thread);
+        thread->GetProfiler()->PyEval_SetProfile(&ProfileFunction, thread);
     }
 
     return thread;

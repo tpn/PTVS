@@ -84,28 +84,32 @@ class VsPyProf;
 
 class ITracer {
 public:
-    virtual void
-    RegisterName(
+
+    virtual void Trace(_In_ PyTraceInfo *TraceInfo) = 0;
+
+    virtual void RegisterName(
         _In_        DWORD_PTR       NameToken,
         _In_        PCWSTR          Name
-    );
+    ) = 0;
 
-    virtual void
-    RegisterFunction(
+    virtual void RegisterFunction(
         _In_        DWORD_PTR       FunctionToken,
         _In_        PCWSTR          FunctionName,
         _In_        DWORD           LineNumber,
         _In_opt_    DWORD_PTR       ModuleToken,
         _In_opt_    PCWSTR          ModuleName,
         _In_opt_    PCWSTR          ModuleFilename
-    );
+    ) = 0;
 
-    virtual void
-    RegisterModule(
+    virtual void RegisterModule(
         _In_        DWORD_PTR       ModuleToken,
         _In_        PCWSTR          ModuleName,
         _In_        PCWSTR          ModuleFilename
-    );
+    ) = 0;
+
+    virtual bool StartTracing() = 0;
+    virtual bool IsTracing() = 0;
+    virtual bool StopTracing() = 0;
 };
 
 class VsPyProfThread : public PyObject {
@@ -141,7 +145,7 @@ class VsPyProf {
     friend class VsPyProfThread;
     //friend class Tracer;
 
-    Tracer* _tracer;
+    ITracer *_tracer;
     bool _isTracing;
     DWORD _processId;
     DWORD _threadId;
@@ -244,7 +248,10 @@ public:
         return new VsPyProfThread(this);
     }
 
-    void SetTracing(void);
+    void SetTracer(ITracer *tracer) {
+        _tracer = tracer;
+    };
+    ITracer *GetTracer(void) { return _tracer; }
     void UnsetTracing(void) { _isTracing = false; }
     bool IsTracing(void) { return _isTracing; }
 

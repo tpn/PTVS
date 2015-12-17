@@ -648,6 +648,50 @@ GetNextRecord(
     return AllocateRecords(TraceStore, RecordSize, RecordCount);
 }
 
+BOOL
+InitializeTraceContext(
+    _Inout_ PTRACE_CONTEXT      TraceContext,
+    _In_    PDWORD_PTR          SizeOfTraceContext,
+    _In_    PTRACE_SESSION      TraceSession,
+    _In_    PTRACE_STORES       TraceStores,
+    _In_    PPYTRACE_CALLBACK   TraceCallback
+)
+{
+    if (!TraceContext) {
+        if (SizeOfTraceContext) {
+            *SizeOfTraceContext = sizeof(*TraceContext);
+        }
+        return FALSE;
+    }
+
+    if (!SizeOfTraceContext) {
+        return FALSE;
+    }
+
+    if (*SizeOfTraceContext < sizeof(*TraceContext)) {
+        return FALSE;
+    }
+
+    if (!TraceSession) {
+        return FALSE;
+    }
+
+    if (!TraceStores) {
+        return FALSE;
+    }
+
+    if (!TraceCallback) {
+        return FALSE;
+    }
+
+    TraceContext->Size = *SizeOfTraceContext;
+    TraceContext->TraceSession = TraceSession;
+    TraceContext->TraceStores = TraceStores;
+    TraceContext->TraceCallback = TraceCallback;
+
+    return TRUE;
+}
+
 VOID
 RegisterName(
     _Inout_ PTRACE_CONTEXT  TraceContext,
@@ -660,24 +704,13 @@ RegisterName(
 
 VOID
 RegisterFunction(
+    _Inout_     PTRACE_CONTEXT  TraceContext,
     _In_        DWORD_PTR       FunctionToken,
     _In_        PCWSTR          FunctionName,
     _In_        DWORD           LineNumber,
     _In_opt_    DWORD_PTR       ModuleToken,
     _In_opt_    PCWSTR          ModuleName,
     _In_opt_    PCWSTR          ModuleFilename
-)
-{
-
-}
-
-VOID
-RecordFunction(
-    _Inout_ PTRACE_CONTEXT  TraceContext,
-    _In_    DWORD_PTR       ModuleAddress,
-    _In_    DWORD_PTR       FunctionAddress,
-    _In_    PUNICODE_STRING FunctionName,
-    _In_    LONG            LineNumber
 )
 {
 

@@ -36,8 +36,8 @@ class Tracer : public ITracer {
     HANDLE TraceDirectory;
     HANDLE TraceFileHandle;
 
-    unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD> FileFuncToLine;
-    unordered_map<DWORD_PTR, LPCWSTR> Names;
+    //unordered_map<tuple<DWORD_PTR, DWORD_PTR>, DWORD> FileFuncToLine;
+    //unordered_map<DWORD_PTR, LPCWSTR> Names;
 
     Tracer(VsPyProf *Profiler);
 
@@ -46,6 +46,8 @@ class Tracer : public ITracer {
 
 
 public:
+    int Trace(PyFrameObject *frame, int what, PyObject *arg);
+
     void
     RegisterName(
         _In_        DWORD_PTR       NameToken,
@@ -68,6 +70,9 @@ public:
         _In_        PCWSTR          ModuleName,
         _In_        PCWSTR          ModuleFilename
     );
+
+    static ITracer *Create(PCWSTR basedir, VsPyProf *profiler);
+    ~Tracer();
 };
 
 /*

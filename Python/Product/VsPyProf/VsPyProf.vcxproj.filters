@@ -8,6 +8,7 @@
     <ClCompile Include="SourceFile.cpp" />
     <ClCompile Include="Tracing.c" />
     <ClCompile Include="Tracer.cpp" />
+    <ClCompile Include="PyTrace.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="python.h" />
