@@ -20,8 +20,10 @@
 
 
 Tracer::Tracer(
+    PTRACE_CONTEXT TraceContext,
     VsPyProf *Profiler
-) : Profiler(Profiler)
+) : TraceContext(TraceContext),
+    Profiler(Profiler)
 {
 
 }
@@ -32,10 +34,11 @@ Tracer::~Tracer()
 }
 
 ITracer* Tracer::Create(
-    PCWSTR basedir,
-    VsPyProf *profiler
+    PTRACE_CONTEXT TraceContext,
+    VsPyProf *Profiler
 )
 {
+    Tracer *tracer = new Tracer(TraceContext, Profiler);
     return nullptr;
 }
 
@@ -49,12 +52,12 @@ _In_        PCWSTR          Name
 
 void
 Tracer::RegisterFunction(
-_In_        DWORD_PTR       FunctionToken,
-_In_        PCWSTR          FunctionName,
-_In_        DWORD           LineNumber,
-_In_opt_    DWORD_PTR       ModuleToken,
-_In_opt_    PCWSTR          ModuleName,
-_In_opt_    PCWSTR          ModuleFilename
+    _In_        DWORD_PTR       FunctionToken,
+    _In_        PCWSTR          FunctionName,
+    _In_        DWORD           LineNumber,
+    _In_opt_    DWORD_PTR       ModuleToken,
+    _In_opt_    PCWSTR          ModuleName,
+    _In_opt_    PCWSTR          ModuleFilename
 )
 {
 
@@ -62,9 +65,9 @@ _In_opt_    PCWSTR          ModuleFilename
 
 void
 Tracer::RegisterModule(
-_In_        DWORD_PTR       ModuleToken,
-_In_        PCWSTR          ModuleName,
-_In_        PCWSTR          ModuleFilename
+    _In_        DWORD_PTR       ModuleToken,
+    _In_        PCWSTR          ModuleName,
+    _In_        PCWSTR          ModuleFilename
 )
 {
 }
