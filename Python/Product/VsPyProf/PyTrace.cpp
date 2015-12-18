@@ -27,9 +27,9 @@ int TraceFunction(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg) 
     return ((PyTraceThread*)obj)->Trace(frame, what, arg);
 }
 
-extern "C" VSPYPROF_API ITracer* CreateTracer(PCWSTR basedir, VsPyProf *profiler)
+extern "C" VSPYPROF_API ITracer* CreateTracer(PTRACE_CONTEXT TraceContext, VsPyProf *Profiler)
 {
-    return Tracer::Create(basedir, profiler);
+    return Tracer::Create(TraceContext, Profiler);
 }
 
 /*
